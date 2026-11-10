@@ -1,0 +1,6 @@
+# Generated outputs and temporary directories
+outputs/
+tmp/
+temp/
+.tmp/
+.temp/
