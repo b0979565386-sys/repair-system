@@ -8,6 +8,7 @@
 - `聚餐餐廳欄位表.xlsx`：欄位表與範例資料
 - `supabase/schema.sql`：Supabase 建表 SQL
 - `index.html`、`style.css`、`app.js`、`config.js`：網頁清單（只能查看）
+- `聚餐餐廳操作說明.docx`：給主辦人與同事的 Word 操作說明
 
 ## 設定
 

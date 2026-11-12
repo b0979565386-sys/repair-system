@@ -47,3 +47,4 @@
 - Excel：欄位表與範例資料（虛構）
 - Supabase：資料表與存取規則（建表 SQL：supabase/schema.sql）
 - 網頁：餐廳清單（只能查看，用 GitHub Pages 發佈）
+- Word：操作說明（聚餐餐廳操作說明.docx）
