@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>聚餐餐廳清單</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>聚餐餐廳清單</h1>
+    <p class="subtitle">跨部門聚餐的候選餐廳，由主辦人整理。可以依條件篩選比較。</p>
+  </header>
+
+  <main>
+    <div id="config-warning" class="notice notice-error" role="alert" hidden></div>
+
+    <section class="card filters" aria-labelledby="filter-title">
+      <h2 id="filter-title" class="visually-hidden">篩選條件</h2>
+      <div class="filter-grid">
+        <div class="field">
+          <label for="f-cuisine">料理類型</label>
+          <select id="f-cuisine">
+            <option value="">全部</option>
+            <option>中式</option>
+            <option>日式</option>
+            <option>西式</option>
+            <option>其他</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-budget">每人預算</label>
+          <select id="f-budget">
+            <option value="">全部</option>
+            <option>500 元以下</option>
+            <option>500～1000 元</option>
+            <option>1000 元以上</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-people">參加人數至少</label>
+          <input id="f-people" type="number" inputmode="numeric" min="1" max="1000" placeholder="例如 80">
+        </div>
+        <div class="field">
+          <label for="f-sort">排序</label>
+          <select id="f-sort">
+            <option value="new">最新登記</option>
+            <option value="capacity">可容納人數多到少</option>
+            <option value="budget">預算低到高</option>
+          </select>
+        </div>
+      </div>
+      <div class="filter-foot">
+        <label class="check"><input id="f-room" type="checkbox"> 只看有包廂</label>
+        <button id="reset-btn" type="button" class="secondary">清除條件</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="list-title">
+      <div class="list-head">
+        <h2 id="list-title">餐廳選項</h2>
+        <button id="refresh-btn" type="button" class="secondary">重新整理</button>
+      </div>
+      <p id="list-status" class="muted" aria-live="polite">載入中…</p>
+      <ul id="restaurant-list" class="restaurant-list"></ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">示範系統，資料全為虛構。餐廳資料由主辦人在後台維護。</footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"
+          integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o"
+          crossorigin="anonymous"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
