@@ -9,6 +9,7 @@
 - `supabase/schema.sql`：Supabase 建表 SQL
 - `index.html`、`style.css`、`app.js`、`config.js`：網頁清單（只能查看）
 - `聚餐餐廳操作說明.docx`：給主辦人與同事的 Word 操作說明
+- `聚餐餐廳提案簡報.pptx`：6 頁 PowerPoint 提案簡報
 
 ## 設定
 
