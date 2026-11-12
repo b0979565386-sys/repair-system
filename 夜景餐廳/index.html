@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1B1F3B">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="個人專用的夜景餐廳口袋名單">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="夜景餐廳">
+  <title>夜景餐廳口袋名單</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="offline-banner" class="banner" role="status" hidden>目前離線，連上網路後才能讀取或修改清單。</div>
+  <div id="config-warning" class="banner banner-error" role="alert" hidden></div>
+
+  <!-- 登入畫面 -->
+  <main id="login-view" class="login" hidden>
+    <img src="icons/icon-192.png" alt="" width="72" height="72" class="login-icon">
+    <h1>夜景餐廳口袋名單</h1>
+    <p class="muted">個人專用，請登入後使用。</p>
+    <form id="login-form" class="card" novalidate>
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" inputmode="email" required>
+      </div>
+      <div class="field">
+        <label for="login-password">密碼</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+      </div>
+      <button id="login-btn" type="submit" class="primary wide">登入</button>
+      <p id="login-message" class="message" role="alert" hidden></p>
+    </form>
+  </main>
+
+  <!-- 清單畫面 -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <h1>夜景餐廳</h1>
+      <div class="topbar-actions">
+        <button id="install-btn" type="button" class="ghost" hidden>安裝 App</button>
+        <button id="logout-btn" type="button" class="ghost">登出</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="filters" aria-label="篩選條件">
+        <input id="f-search" type="search" placeholder="搜尋餐廳名稱、城市、地址" aria-label="搜尋">
+        <div class="filter-grid">
+          <select id="f-city" aria-label="城市或地區"><option value="">全部城市</option></select>
+          <select id="f-view" aria-label="夜景類型">
+            <option value="">全部夜景</option>
+            <option>城市夜景</option><option>海景</option><option>山景</option><option>河景</option><option>其他</option>
+          </select>
+          <select id="f-price" aria-label="每人價位">
+            <option value="">全部價位</option>
+            <option>1000 元以下</option><option>1000～2000 元</option><option>2000 元以上</option>
+          </select>
+          <select id="f-status" aria-label="狀態">
+            <option value="">想去＋去過</option>
+            <option value="want">只看想去</option>
+            <option value="visited">只看去過</option>
+          </select>
+        </div>
+      </section>
+
+      <p id="list-status" class="muted" aria-live="polite"></p>
+      <ul id="list" class="list"></ul>
+    </main>
+
+    <button id="add-btn" type="button" class="fab" aria-label="新增夜景餐廳">＋</button>
+  </div>
+
+  <!-- 新增／修改表單 -->
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form" method="dialog" novalidate>
+      <header class="dialog-head">
+        <h2 id="editor-title">新增夜景餐廳</h2>
+        <button type="button" class="ghost" data-close>取消</button>
+      </header>
+      <div class="dialog-body">
+        <fieldset>
+          <legend>基本與地點</legend>
+          <div class="field"><label for="e-name">餐廳名稱 <span class="req">*</span></label><input id="e-name" name="name" maxlength="100" required></div>
+          <div class="field"><label for="e-city">城市或地區 <span class="req">*</span></label><input id="e-city" name="city" maxlength="50" required list="city-options"><datalist id="city-options"></datalist></div>
+          <div class="field"><label for="e-address">地址</label><input id="e-address" name="address" maxlength="200"></div>
+          <div class="field"><label for="e-url">餐廳網址</label><input id="e-url" name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></div>
+        </fieldset>
+        <fieldset>
+          <legend>夜景特色</legend>
+          <div class="field"><label for="e-view">夜景類型 <span class="req">*</span></label>
+            <select id="e-view" name="view_type" required>
+              <option value="">請選擇</option><option>城市夜景</option><option>海景</option><option>山景</option><option>河景</option><option>其他</option>
+            </select></div>
+          <div class="field"><label for="e-floor">樓層或高度</label><input id="e-floor" name="floor_or_height" maxlength="50" placeholder="例如 38 樓、山上"></div>
+          <div class="field"><label for="e-window">靠窗座位好不好訂</label>
+            <select id="e-window" name="window_seat"><option value="">未填</option><option>容易</option><option>普通</option><option>困難</option></select></div>
+        </fieldset>
+        <fieldset>
+          <legend>價位與訂位</legend>
+          <div class="field"><label for="e-price">每人價位</label>
+            <select id="e-price" name="price_range"><option value="">未填</option><option>1000 元以下</option><option>1000～2000 元</option><option>2000 元以上</option></select></div>
+          <div class="field"><label for="e-reservation">是否需要訂位</label>
+            <select id="e-reservation" name="reservation"><option value="">未填</option><option>需要</option><option>建議</option><option>不用</option></select></div>
+          <div class="field"><label for="e-hours">營業時間</label><input id="e-hours" name="opening_hours" maxlength="100" placeholder="例如 17:30～23:00"></div>
+        </fieldset>
+        <fieldset>
+          <legend>評價與推薦</legend>
+          <div class="field"><label for="e-rating">評分</label>
+            <select id="e-rating" name="rating"><option value="">還沒評分</option><option value="5">★★★★★ 5</option><option value="4">★★★★ 4</option><option value="3">★★★ 3</option><option value="2">★★ 2</option><option value="1">★ 1</option></select></div>
+          <div class="field"><label for="e-visited">去過的日期（還沒去過就留空）</label><input id="e-visited" name="visited_on" type="date"></div>
+          <div class="field"><label for="e-recommender">推薦人</label><input id="e-recommender" name="recommender" maxlength="50" placeholder="例如 朋友 A、旅遊書"></div>
+          <div class="field"><label for="e-reason">推薦理由</label><textarea id="e-reason" name="reason" maxlength="500" rows="3"></textarea></div>
+        </fieldset>
+        <p id="editor-message" class="message" role="alert" hidden></p>
+      </div>
+      <footer class="dialog-foot">
+        <button id="delete-btn" type="button" class="danger" hidden>刪除</button>
+        <button id="save-btn" type="submit" class="primary">儲存</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"
+          integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o"
+          crossorigin="anonymous"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
