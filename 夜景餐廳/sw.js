@@ -1,7 +1,7 @@
 // 夜景餐廳 PWA 的 Service Worker。
 // 只快取網頁本身的檔案（App Shell），讓 App 可以安裝、離線也能開啟畫面。
-// 不快取任何 Supabase 資料：清單是個人資料，只在登入且連線時讀取。
-const CACHE = "night-view-v1";
+// 不快取任何 Supabase 資料：清單只在連線時讀取。
+const CACHE = "night-view-v2";
 const SHELL = [
   "./",
   "./index.html",

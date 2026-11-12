@@ -1,21 +1,22 @@
 -- =====================================================================
--- 夜景餐廳口袋名單：Supabase 建表 SQL
+-- 夜景餐廳口袋名單：Supabase 建表 SQL（不用登入版）
 -- 資料表：public.night_view_restaurants
 --
 -- 依據：夜景餐廳/需求筆記.txt
 --
--- 這是個人專用清單：
---   - 只有登入的帳號（authenticated）能存取，未登入的 anon 什麼都不能做。
---   - 每一筆資料都有擁有者（owner_id），只有擁有者本人能讀取、新增、修改、刪除。
---   - 請另外在 Supabase 的 Authentication 設定關閉自行註冊，只保留自己的帳號。
+-- ※ 重要：這一版不需要登入。
+--   未登入的 anon 角色可以讀取、新增、修改、刪除全部資料。
+--   網頁發佈在公開的 GitHub Pages，任何拿到網址的人都能看到並修改這份清單。
+--   這是需求方確認過的取捨；請只放可以公開的內容。
 --
 -- 安全設計分三層：
---   1. GRANT：資料庫權限，anon 沒有任何權限；authenticated 只能寫入允許的欄位。
---   2. RLS：資料列安全，每個操作都限制 owner_id = auth.uid()。
---   3. CHECK：資料表限制，欄位值與長度必須合法。
+--   1. GRANT：anon 可讀、可刪；新增與修改只能寫內容欄位（id 與時間欄位由資料庫產生）。
+--   2. RLS：啟用資料列安全，明確寫出允許的操作；沒寫到的一律拒絕。
+--   3. CHECK：欄位值與長度必須合法，避免亂填或塞入過長內容。
 --
 -- 只能使用 publishable key 存取；secret key 不可以寫進任何檔案。
--- 本檔案可重複執行：資料表已存在時不會重建，政策與觸發器會先刪除再建立。
+-- 本檔案可重複執行，也可以直接套用在舊版（需要登入版）的資料表上：
+-- 會移除舊的擁有者欄位與政策，既有的餐廳資料會保留。
 -- 執行方式：在 Supabase 專案的 SQL Editor 貼上後執行。
 -- =====================================================================
 
@@ -29,10 +30,6 @@
 create table if not exists public.night_view_restaurants (
     -- 主鍵：自動產生。
     id              uuid        primary key default gen_random_uuid(),
-
-    -- 擁有者：自動帶入目前登入的帳號；帳號刪除時一併刪除資料。
-    owner_id        uuid        not null default auth.uid()
-                                references auth.users (id) on delete cascade,
 
     -- 登記時間、最後修改時間：自動產生。
     created_at      timestamptz not null default now(),
@@ -98,13 +95,26 @@ create table if not exists public.night_view_restaurants (
     visited_on      date
 );
 
--- 依擁有者與登記時間查詢清單，加索引加快速度。
-create index if not exists nvr_owner_created_idx
-    on public.night_view_restaurants (owner_id, created_at desc);
+
+-- ---------------------------------------------------------------------
+-- 二、從舊版（需要登入版）升級
+-- ---------------------------------------------------------------------
+-- 舊版有擁有者欄位與「只有擁有者可以…」的政策，不用登入後不再需要。
+-- 先刪除舊政策（它們引用擁有者欄位），再刪除擁有者欄位與它的索引。
+-- 新建立的資料表沒有這些東西，以下指令會直接略過。
+drop policy if exists "只有擁有者可以讀取" on public.night_view_restaurants;
+drop policy if exists "只有擁有者可以新增" on public.night_view_restaurants;
+drop policy if exists "只有擁有者可以修改" on public.night_view_restaurants;
+drop policy if exists "只有擁有者可以刪除" on public.night_view_restaurants;
+drop index if exists public.nvr_owner_created_idx;
+alter table public.night_view_restaurants drop column if exists owner_id;
+
+-- 清單依登記時間由新到舊排序，加索引加快查詢。
+create index if not exists nvr_created_idx
+    on public.night_view_restaurants (created_at desc);
 
 -- 資料表與欄位說明，會顯示在 Supabase 的 Table Editor。
-comment on table  public.night_view_restaurants                 is '夜景餐廳口袋名單（個人專用，只有擁有者能存取）';
-comment on column public.night_view_restaurants.owner_id        is '擁有者，自動帶入登入帳號';
+comment on table  public.night_view_restaurants                 is '夜景餐廳口袋名單（不用登入，任何人可讀寫，請只放可公開的內容）';
 comment on column public.night_view_restaurants.created_at      is '登記時間，自動產生';
 comment on column public.night_view_restaurants.updated_at      is '最後修改時間，自動更新';
 comment on column public.night_view_restaurants.name            is '餐廳名稱';
@@ -124,7 +134,7 @@ comment on column public.night_view_restaurants.visited_on      is '去過的日
 
 
 -- ---------------------------------------------------------------------
--- 二、自動更新「最後修改時間」
+-- 三、自動更新「最後修改時間」
 -- ---------------------------------------------------------------------
 -- 每次修改資料時，由資料庫把 updated_at 設為現在時間，網頁不能自行指定。
 create or replace function public.nvr_set_updated_at()
@@ -145,68 +155,64 @@ create trigger nvr_set_updated_at
 
 
 -- ---------------------------------------------------------------------
--- 三、GRANT 權限（第 1 層）
+-- 四、GRANT 權限（第 1 層）
 -- ---------------------------------------------------------------------
--- 先收回所有角色的全部權限，確保起點是「什麼都不能做」。
+-- 先收回所有角色的全部權限，確保起點是「什麼都不能做」，
+-- 也清掉舊版給 authenticated 的權限。
 revoke all on table public.night_view_restaurants from public, anon, authenticated;
 
--- anon（未登入）不給任何權限。
+-- anon（不用登入）需要使用 public schema。
+grant usage on schema public to anon;
 
--- authenticated（已登入）需要使用 public schema。
-grant usage on schema public to authenticated;
-
--- 已登入的帳號可以讀取與刪除（實際只限自己的資料，見 RLS）。
-grant select, delete on table public.night_view_restaurants to authenticated;
+-- anon 可以讀取與刪除。
+grant select, delete on table public.night_view_restaurants to anon;
 
 -- 新增與修改只能寫入下列內容欄位。
--- id、owner_id、created_at、updated_at 不在清單內，由資料庫自動產生，網頁不能指定。
+-- id、created_at、updated_at 不在清單內，由資料庫自動產生，網頁不能指定。
 grant insert (name, city, address, url, view_type, floor_or_height, window_seat,
               price_range, reservation, opening_hours, rating, reason, recommender, visited_on)
-    on table public.night_view_restaurants to authenticated;
+    on table public.night_view_restaurants to anon;
 grant update (name, city, address, url, view_type, floor_or_height, window_seat,
               price_range, reservation, opening_hours, rating, reason, recommender, visited_on)
-    on table public.night_view_restaurants to authenticated;
+    on table public.night_view_restaurants to anon;
+
+-- 不給 TRUNCATE：即使能刪除，也只能用條件一筆一筆刪，不能一次清空整張表。
 
 
 -- ---------------------------------------------------------------------
--- 四、RLS 資料列安全（第 2 層）
+-- 五、RLS 資料列安全（第 2 層）
 -- ---------------------------------------------------------------------
 -- 啟用資料列安全：啟用後，沒有政策允許的操作一律拒絕。
 alter table public.night_view_restaurants enable row level security;
 
--- 先刪除舊政策，讓本檔案可以重複執行。
-drop policy if exists "只有擁有者可以讀取" on public.night_view_restaurants;
-drop policy if exists "只有擁有者可以新增" on public.night_view_restaurants;
-drop policy if exists "只有擁有者可以修改" on public.night_view_restaurants;
-drop policy if exists "只有擁有者可以刪除" on public.night_view_restaurants;
+-- 先刪除本版政策，讓本檔案可以重複執行。
+drop policy if exists "任何人可以讀取" on public.night_view_restaurants;
+drop policy if exists "任何人可以新增" on public.night_view_restaurants;
+drop policy if exists "任何人可以修改" on public.night_view_restaurants;
+drop policy if exists "任何人可以刪除" on public.night_view_restaurants;
 
--- 讀取：只看得到自己的資料。
-create policy "只有擁有者可以讀取"
+-- 不用登入：anon 可以讀取、新增、修改、刪除全部資料列。
+create policy "任何人可以讀取"
     on public.night_view_restaurants
     for select
-    to authenticated
-    using (owner_id = (select auth.uid()));
+    to anon
+    using (true);
 
--- 新增：新資料的擁有者必須是自己。
-create policy "只有擁有者可以新增"
+create policy "任何人可以新增"
     on public.night_view_restaurants
     for insert
-    to authenticated
-    with check (owner_id = (select auth.uid()));
+    to anon
+    with check (true);
 
--- 修改：只能改自己的資料，改完仍必須是自己的。
-create policy "只有擁有者可以修改"
+create policy "任何人可以修改"
     on public.night_view_restaurants
     for update
-    to authenticated
-    using (owner_id = (select auth.uid()))
-    with check (owner_id = (select auth.uid()));
+    to anon
+    using (true)
+    with check (true);
 
--- 刪除：只能刪自己的資料。
-create policy "只有擁有者可以刪除"
+create policy "任何人可以刪除"
     on public.night_view_restaurants
     for delete
-    to authenticated
-    using (owner_id = (select auth.uid()));
-
--- anon 沒有任何政策：即使權限被誤開，RLS 仍會拒絕未登入的存取。
+    to anon
+    using (true);

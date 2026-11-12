@@ -1,6 +1,6 @@
-// 夜景餐廳口袋名單（PWA）
-// 登入後新增、修改、刪除、篩選自己的夜景餐廳。
-// 資料表與權限設計見 supabase/schema.sql：每一筆資料只有擁有者本人能存取。
+// 夜景餐廳口袋名單（PWA，不用登入）
+// 打開就能新增、修改、刪除、篩選夜景餐廳。
+// 資料表與權限設計見 supabase/schema.sql：不用登入，任何拿到網址的人都能讀寫。
 (function () {
   "use strict";
 
@@ -11,7 +11,6 @@
   const LABELS = { name: "餐廳名稱", city: "城市或地區", address: "地址", url: "餐廳網址", floor_or_height: "樓層或高度", opening_hours: "營業時間", reason: "推薦理由", recommender: "推薦人" };
 
   const $ = (id) => document.getElementById(id);
-  const views = { login: $("login-view"), app: $("app-view") };
   const listEl = $("list");
   const listStatus = $("list-status");
   const editor = $("editor");
@@ -47,7 +46,7 @@
 
   // ---------- 離線提示 ----------
   const updateOnline = () => { $("offline-banner").hidden = navigator.onLine; };
-  window.addEventListener("online", () => { updateOnline(); if (client && !views.app.hidden) load(); });
+  window.addEventListener("online", () => { updateOnline(); if (client) load(); });
   window.addEventListener("offline", updateOnline);
   updateOnline();
 
@@ -58,59 +57,18 @@
     const box = $("config-warning");
     box.textContent = problem;
     box.hidden = false;
-    views.login.hidden = false;
-    $("login-btn").disabled = true;
+    $("add-btn").disabled = true;
+    $("refresh-btn").disabled = true;
+    listStatus.textContent = "尚未連線，無法載入清單。";
     return;
   }
+  // 不用登入：不保存任何登入狀態
   client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, {
-    auth: { persistSession: true, autoRefreshToken: true, storageKey: "night-view-auth" },
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // ---------- 登入狀態 ----------
-  client.auth.onAuthStateChange((_event, session) => showView(session));
-  client.auth.getSession().then(({ data }) => showView(data.session));
-
-  let shownUser = undefined;
-  function showView(session) {
-    const userId = session ? session.user.id : null;
-    if (userId === shownUser) return;
-    shownUser = userId;
-    views.login.hidden = !!session;
-    views.app.hidden = !session;
-    if (session) {
-      load();
-    } else {
-      rows = [];
-      listEl.replaceChildren();
-      $("login-password").value = "";
-    }
-  }
-
-  $("login-form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const msg = $("login-message");
-    msg.hidden = true;
-    const email = $("login-email").value.trim();
-    const password = $("login-password").value;
-    if (!email || !password) return showMsg(msg, "請輸入 Email 與密碼。");
-    const btn = $("login-btn");
-    btn.disabled = true;
-    btn.textContent = "登入中…";
-    try {
-      const { error } = await client.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    } catch (err) {
-      console.error(err);
-      showMsg(msg, describeAuthError(err));
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "登入";
-    }
-  });
-
-  $("logout-btn").addEventListener("click", async () => {
-    await client.auth.signOut();
-  });
+  $("refresh-btn").addEventListener("click", load);
+  load();
 
   // ---------- 讀取與顯示 ----------
   async function load() {
@@ -307,21 +265,12 @@
       return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
     } catch (_) { return null; }
   }
-  function describeAuthError(err) {
-    if (!navigator.onLine) return "目前離線，請連上網路後再登入。";
-    const m = String((err && err.message) || "");
-    if (/invalid login credentials/i.test(m)) return "Email 或密碼錯誤。";
-    if (/email not confirmed/i.test(m)) return "這個帳號的 Email 尚未驗證。";
-    if (/fetch|network/i.test(m)) return "無法連線到伺服器，請稍後再試。";
-    return m || "登入失敗，請稍後再試。";
-  }
   function describeError(err) {
     if (!navigator.onLine) return "目前離線，請連上網路後再試。";
     const code = err && err.code;
-    if (code === "42501") return "沒有權限，請重新登入後再試。";
+    if (code === "42501") return "沒有權限，請重新執行 supabase/schema.sql 更新資料庫設定。";
     if (code === "23514") return "資料格式不符合規定，請檢查各欄位內容與字數。";
     if (code === "42P01" || code === "PGRST205") return "找不到資料表，請先執行 supabase/schema.sql。";
-    if (code === "PGRST301" || /jwt/i.test(String(err && err.message))) return "登入已過期，請重新登入。";
     if (err && /fetch|network/i.test(String(err.message))) return "無法連線到伺服器，請稍後再試。";
     return (err && err.message) || "發生未知錯誤，請稍後再試。";
   }
