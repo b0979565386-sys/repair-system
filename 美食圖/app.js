@@ -248,7 +248,8 @@
 
   function navLink(r) {
     const a = el("a", "", "導航 ↗");
-    a.href = `https://www.google.com/maps/dir/?api=1&destination=${r.latitude},${r.longitude}&travelmode=walking`;
+    // 用店名＋地址導航，Google 地圖會顯示店家名稱，而不是經緯度
+    a.href = "https://www.google.com/maps/dir/?api=1&travelmode=walking&destination=" + encodeURIComponent([r.name, r.address].filter(Boolean).join(" "));
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     return a;

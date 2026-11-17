@@ -482,10 +482,10 @@
     li.append(el("span", "place-kind", p.kind), el("div", "place-name", p.name));
     if (p.address) li.append(el("div", "place-addr", p.address));
     const actions = el("div", "place-actions");
-    const lat = Number(p.lat), lon = Number(p.lon);
-    if (isFinite(lat) && isFinite(lon)) {
+    if (p.name) {
+      // 用店名＋地址查詢，Google 地圖會顯示店家名稱，而不是經緯度
       const a = el("a", "", "在地圖查看 ↗");
-      a.href = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      a.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapsText(p.name, p.address, p.city));
       a.target = "_blank";
       a.rel = "noopener noreferrer";
       actions.append(a);
@@ -697,9 +697,10 @@
     if (r.reason) parts.push(el("p", "reason", r.reason));
 
     const links = el("div", "detail-links");
-    if (hasPos(r)) {
+    {
+      // 用店名＋地址導航，Google 地圖會顯示店家名稱，而不是經緯度
       const nav = el("a", "link-btn", "導航 ↗");
-      nav.href = `https://www.google.com/maps/dir/?api=1&destination=${r.latitude},${r.longitude}`;
+      nav.href = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(mapsText(r.name, r.address, r.city));
       nav.target = "_blank";
       nav.rel = "noopener noreferrer";
       links.append(nav);
@@ -993,6 +994,11 @@
   }
 
   // ---------- 小工具 ----------
+  // Google 地圖用的文字：店名＋地址（沒有地址就用縣市），不放經緯度
+  function mapsText(name, address, city) {
+    const where = address || city || "";
+    return [name, where && !String(name).includes(where) ? where : ""].filter(Boolean).join(" ");
+  }
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
