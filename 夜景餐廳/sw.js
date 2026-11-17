@@ -1,7 +1,7 @@
 // 夜景餐廳 PWA 的 Service Worker。
 // 只快取網頁本身的檔案（App Shell），讓 App 可以安裝、離線也能開啟畫面。
 // 不快取任何 Supabase 資料：清單只在連線時讀取。
-const CACHE = "night-view-v3";
+const CACHE = "night-view-v4";
 const SHELL = [
   "./",
   "./index.html",
@@ -13,14 +13,21 @@ const SHELL = [
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
 ];
-const LIB = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
+// 來自 CDN 的程式庫（Supabase、Leaflet 地圖）。地圖圖磚不快取。
+const LIBS = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js",
+  "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
+  "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
     await cache.addAll(SHELL);
     // 程式庫來自 CDN，快取失敗也不影響安裝
-    try { await cache.add(new Request(LIB, { mode: "cors" })); } catch (_) { /* 略過 */ }
+    for (const url of LIBS) {
+      try { await cache.add(new Request(url, { mode: "cors" })); } catch (_) { /* 略過 */ }
+    }
     await self.skipWaiting();
   })());
 });
@@ -39,8 +46,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
-  // 只處理本站檔案與 supabase-js 程式庫；Supabase API 一律直接連線、不快取
-  if (!sameOrigin && req.url !== LIB) return;
+  // 只處理本站檔案與 CDN 程式庫；Supabase API、景點搜尋、地圖圖磚一律直接連線、不快取
+  if (!sameOrigin && !LIBS.includes(req.url)) return;
   if (sameOrigin && !url.pathname.startsWith(new URL("./", self.location).pathname)) return;
 
   // 先連網取得最新版本，失敗（離線）時改用快取

@@ -14,6 +14,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -66,8 +68,21 @@
         </div>
       </section>
 
+      <div class="view-switch" role="group" aria-label="顯示方式">
+        <button id="view-list" type="button" class="seg active" aria-pressed="true">清單</button>
+        <button id="view-map" type="button" class="seg" aria-pressed="false">地圖</button>
+      </div>
+
       <p id="list-status" class="muted" aria-live="polite"></p>
       <ul id="list" class="list"></ul>
+
+      <section id="map-view" class="map-view" aria-label="餐廳地圖" hidden>
+        <div id="map" class="map"></div>
+        <div class="map-foot">
+          <p id="map-note" class="muted small"></p>
+          <button id="locate-btn" type="button" class="ghost small-btn">📍 我的位置</button>
+        </div>
+      </section>
     </main>
 
     <button id="add-btn" type="button" class="fab" aria-label="新增夜景餐廳">＋</button>
@@ -107,6 +122,17 @@
           <div class="field"><label for="e-hours">營業時間</label><input id="e-hours" name="opening_hours" maxlength="100" placeholder="例如 17:30～23:00"></div>
         </fieldset>
         <fieldset>
+          <legend>位置（地圖）</legend>
+          <p class="muted small hint">點一下地圖放上位置，再點別處可以移動。沒有位置的餐廳不會出現在地圖上。</p>
+          <div id="e-map" class="map map-small" aria-label="選擇餐廳位置的地圖"></div>
+          <div class="coords">
+            <span id="e-coords" class="muted small">尚未設定位置</span>
+            <button id="e-clear-pos" type="button" class="ghost small-btn" hidden>清除位置</button>
+          </div>
+          <input type="hidden" id="e-lat" name="latitude">
+          <input type="hidden" id="e-lon" name="longitude">
+        </fieldset>
+        <fieldset>
           <legend>評價與推薦</legend>
           <div class="field"><label for="e-rating">評分</label>
             <select id="e-rating" name="rating"><option value="">還沒評分</option><option value="5">★★★★★ 5</option><option value="4">★★★★ 4</option><option value="3">★★★ 3</option><option value="2">★★ 2</option><option value="1">★ 1</option></select></div>
@@ -125,6 +151,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"
           integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"
           crossorigin="anonymous"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
