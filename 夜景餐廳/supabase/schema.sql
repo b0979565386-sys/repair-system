@@ -66,7 +66,7 @@ create table if not exists public.night_view_restaurants (
         constraint nvr_window_seat_values check (window_seat is null or window_seat in ('容易', '普通', '困難')),
 
     -- 價位與訂位 -------------------------------------------------------
-    -- 每人價位區間：可留空；暫定以新台幣分三級（幣別待確認）。
+    -- 每人價位區間：可留空；以新台幣分三級。
     price_range     text
         constraint nvr_price_values check (price_range is null or price_range in ('1000 元以下', '1000～2000 元', '2000 元以上')),
 
@@ -138,16 +138,36 @@ alter table public.night_view_restaurants
                  or array_to_string(photos, ',') ~ '^[0-9a-f-]{36}\.jpg(,[0-9a-f-]{36}\.jpg)*$')
         );
 
+-- ---------------------------------------------------------------------
+-- 二之三、只收臺灣的夜景餐廳
+-- ---------------------------------------------------------------------
+-- 城市或地區只能是臺灣 22 個縣市；地圖位置必須在臺灣範圍內（含澎湖、金門、馬祖）。
+-- 使用 NOT VALID：不檢查已存在的舊資料（避免執行失敗），但之後新增或修改的資料都必須符合。
+alter table public.night_view_restaurants drop constraint if exists nvr_city_taiwan;
+alter table public.night_view_restaurants
+    add constraint nvr_city_taiwan check (city in (
+        '基隆市', '臺北市', '新北市', '桃園市', '新竹市', '新竹縣', '苗栗縣',
+        '臺中市', '彰化縣', '南投縣', '雲林縣', '嘉義市', '嘉義縣', '臺南市',
+        '高雄市', '屏東縣', '宜蘭縣', '花蓮縣', '臺東縣', '澎湖縣', '金門縣', '連江縣'
+    )) not valid;
+
+alter table public.night_view_restaurants drop constraint if exists nvr_coords_taiwan;
+alter table public.night_view_restaurants
+    add constraint nvr_coords_taiwan check (
+        latitude is null
+        or (latitude between 21.8 and 26.5 and longitude between 118.0 and 122.2)
+    ) not valid;
+
 -- 清單依登記時間由新到舊排序，加索引加快查詢。
 create index if not exists nvr_created_idx
     on public.night_view_restaurants (created_at desc);
 
 -- 資料表與欄位說明，會顯示在 Supabase 的 Table Editor。
-comment on table  public.night_view_restaurants                 is '夜景餐廳口袋名單（不用登入，任何人可讀寫，請只放可公開的內容）';
+comment on table  public.night_view_restaurants                 is '臺灣夜景餐廳口袋名單（不用登入，任何人可讀寫，請只放可公開的內容）';
 comment on column public.night_view_restaurants.created_at      is '登記時間，自動產生';
 comment on column public.night_view_restaurants.updated_at      is '最後修改時間，自動更新';
 comment on column public.night_view_restaurants.name            is '餐廳名稱';
-comment on column public.night_view_restaurants.city            is '城市或地區';
+comment on column public.night_view_restaurants.city            is '縣市（臺灣 22 縣市）';
 comment on column public.night_view_restaurants.address         is '地址';
 comment on column public.night_view_restaurants.url             is '餐廳網址';
 comment on column public.night_view_restaurants.view_type       is '夜景類型：城市夜景、海景、山景、河景、其他';

@@ -16,6 +16,18 @@
   const MAX_SIDE = 1600;              // 長邊最多 1600 像素
   const MAX_BYTES = 2 * 1024 * 1024;  // 與儲存桶的 2 MB 上限一致
 
+  // 只收臺灣的夜景餐廳：22 個縣市與地圖範圍（含澎湖、金門、馬祖），與資料庫 CHECK 一致
+  const TW_CITIES = ["基隆市", "臺北市", "新北市", "桃園市", "新竹市", "新竹縣", "苗栗縣",
+    "臺中市", "彰化縣", "南投縣", "雲林縣", "嘉義市", "嘉義縣", "臺南市",
+    "高雄市", "屏東縣", "宜蘭縣", "花蓮縣", "臺東縣", "澎湖縣", "金門縣", "連江縣"];
+  const TW_BOUNDS = { south: 21.8, north: 26.5, west: 118.0, east: 122.2 };
+  const inTaiwan = (lat, lon) => lat >= TW_BOUNDS.south && lat <= TW_BOUNDS.north && lon >= TW_BOUNDS.west && lon <= TW_BOUNDS.east;
+  // 「台」統一成正式寫法「臺」，再找出對應的縣市
+  function toTwCity(text) {
+    const t = String(text || "").replace(/台/g, "臺").trim();
+    return TW_CITIES.find((c) => t === c || t.includes(c)) || "";
+  }
+
   const $ = (id) => document.getElementById(id);
   const listEl = $("list");
   const listStatus = $("list-status");
@@ -98,9 +110,8 @@
   function refreshCityOptions() {
     const cities = [...new Set(rows.map((r) => r.city))].sort((a, b) => a.localeCompare(b, "zh-Hant"));
     const keep = filters.city.value;
-    filters.city.replaceChildren(new Option("全部城市", ""), ...cities.map((c) => new Option(c, c)));
+    filters.city.replaceChildren(new Option("全部縣市", ""), ...cities.map((c) => new Option(c, c)));
     filters.city.value = cities.includes(keep) ? keep : "";
-    $("city-options").replaceChildren(...cities.map((c) => new Option(c)));
   }
 
   for (const f of Object.values(filters)) f.addEventListener(f.tagName === "INPUT" ? "input" : "change", render);
@@ -197,6 +208,13 @@
   const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> 貢獻者';
   const DEFAULT_CENTER = [23.7, 120.95]; // 預設顯示台灣全島
   const DEFAULT_ZOOM = 7;
+  // 地圖只能在臺灣附近移動（四周多留一點空間）
+  const MAP_OPTIONS = {
+    zoomControl: true,
+    minZoom: 6,
+    maxBounds: [[TW_BOUNDS.south - 1, TW_BOUNDS.west - 1], [TW_BOUNDS.north + 1, TW_BOUNDS.east + 1]],
+    maxBoundsViscosity: 0.8,
+  };
   const mapView = $("map-view");
   const mapNote = $("map-note");
   let mainMap = null;
@@ -232,7 +250,7 @@
       return;
     }
     if (!mainMap) {
-      mainMap = L.map("map", { zoomControl: true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+      mainMap = L.map("map", MAP_OPTIONS).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
       addTiles(mainMap);
       markerLayer = L.layerGroup().addTo(mainMap);
     }
@@ -330,9 +348,16 @@
       return;
     }
     if (editMap) return;
-    editMap = L.map("e-map", { zoomControl: true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    editMap = L.map("e-map", MAP_OPTIONS).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
     addTiles(editMap);
-    editMap.on("click", (e) => setPos(e.latlng.lat, e.latlng.lng));
+    editMap.on("click", (e) => {
+      const lon = ((e.latlng.lng + 540) % 360) - 180;
+      if (!inTaiwan(e.latlng.lat, lon)) {
+        $("e-coords").textContent = "請點選臺灣範圍內的位置（含澎湖、金門、馬祖）。";
+        return;
+      }
+      setPos(e.latlng.lat, e.latlng.lng);
+    });
   }
 
   function round6(n) { return Math.round(n * 1e6) / 1e6; }
@@ -406,11 +431,14 @@
     try {
       const params = new URLSearchParams({
         q, format: "jsonv2", addressdetails: "1", extratags: "1", limit: "8", "accept-language": "zh-TW,zh,en",
+        countrycodes: "tw", // 只搜尋臺灣
       });
       const res = await fetch(PLACE_API + "?" + params.toString(), { headers: { Accept: "application/json" } });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
-      const places = (Array.isArray(data) ? data : []).map(toPlace).filter((p) => p.name);
+      // 只保留臺灣範圍內的地點（以防服務回傳範圍外的結果）
+      const places = (Array.isArray(data) ? data : []).map(toPlace)
+        .filter((p) => p.name && p.latitude !== null && inTaiwan(p.latitude, p.longitude));
       placeResults.replaceChildren(...places.map(placeCard));
       placeCredit.hidden = false;
       showPlaceStatus(places.length ? `找到 ${places.length} 個地點，按「加入清單」帶入新增表單。` : "找不到符合的地點，試試加上城市名稱，例如「台北 象山」。");
@@ -439,7 +467,8 @@
   function toPlace(p) {
     const a = p.address || {};
     const name = String(p.name || (p.display_name || "").split(",")[0] || "").trim();
-    const city = a.city || a.town || a.county || a.village || a.state || a.country || "";
+    // 依序比對地址中的直轄市、縣、州與完整地址，找出臺灣的縣市；找不到就留空讓使用者選
+    const city = [a.city, a.county, a.state, a.town, p.display_name].map(toTwCity).find(Boolean) || "";
     const parts = String(p.display_name || "").split(",").map((s) => s.trim()).filter(Boolean);
     if (parts.length && name.includes(parts[0])) parts.shift();
     const website = p.extratags && (p.extratags.website || p.extratags["contact:website"]);
@@ -496,6 +525,19 @@
     return s.length > max ? s.slice(0, max).trim() : s;
   }
 
+  // ---------- 縣市選單 ----------
+  const citySelect = $("e-city");
+  citySelect.append(...TW_CITIES.map((c) => new Option(c, c)));
+  // 舊資料的城市若不是臺灣縣市（或寫法不同），暫時列出原本的值，提醒改選
+  function setCityChoice(value) {
+    citySelect.querySelectorAll("option[data-legacy]").forEach((o) => o.remove());
+    if (value && !toTwCity(value)) {
+      const legacy = new Option(`${value}（不是臺灣縣市，請改選）`, value);
+      legacy.dataset.legacy = "1";
+      citySelect.append(legacy);
+    }
+  }
+
   // ---------- 新增／修改／刪除 ----------
   $("add-btn").addEventListener("click", () => openEditor(null));
   editor.querySelector("[data-close]").addEventListener("click", () => editor.close());
@@ -507,7 +549,9 @@
     $("delete-btn").hidden = !row;
     editorMsg.hidden = true;
     editorForm.reset();
-    const src = row || prefill || {};
+    const src = { ...(row || prefill || {}) };
+    setCityChoice(src.city);
+    if (src.city) src.city = toTwCity(src.city) || src.city;
     for (const f of FIELDS) {
       const input = editorForm.elements[f];
       if (input) input.value = src[f] !== null && src[f] !== undefined ? String(src[f]) : "";
@@ -600,7 +644,8 @@
 
   function validate(r) {
     if (!r.name) return { field: "name", message: "請填寫餐廳名稱。" };
-    if (!r.city) return { field: "city", message: "請填寫城市或地區。" };
+    if (!r.city) return { field: "city", message: "請選擇縣市。" };
+    if (!TW_CITIES.includes(r.city)) return { field: "city", message: "只能選臺灣的縣市，請重新選擇。" };
     if (!r.view_type) return { field: "view_type", message: "請選擇夜景類型。" };
     for (const [f, max] of Object.entries(MAX_LEN)) {
       if (r[f] && r[f].length > max) return { field: f, message: `${LABELS[f]}最多 ${max} 字。` };
@@ -609,6 +654,9 @@
     const hasLat = r.latitude !== null, hasLon = r.longitude !== null;
     if (hasLat !== hasLon || (hasLat && !(Math.abs(r.latitude) <= 90 && Math.abs(r.longitude) <= 180))) {
       return { field: null, message: "位置資料不正確，請在地圖上重新點選，或按「清除位置」。" };
+    }
+    if (hasLat && !inTaiwan(r.latitude, r.longitude)) {
+      return { field: null, message: "位置不在臺灣範圍內，請在地圖上重新點選臺灣的位置，或按「清除位置」。" };
     }
     return null;
   }
