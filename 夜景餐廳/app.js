@@ -184,6 +184,11 @@
       actions.append(el("span"));
     }
     const btns = el("div", "item-btns");
+    const view = el("button", "primary", "查看");
+    view.type = "button";
+    view.setAttribute("aria-label", "查看 " + r.name);
+    view.addEventListener("click", () => openDetail(r.id));
+    btns.append(view);
     if (hasPos(r) && HAS_MAP) {
       const onMap = el("button", "ghost", "地圖");
       onMap.type = "button";
@@ -269,45 +274,21 @@
     const withPos = lastShown.filter(hasPos);
     for (const r of withPos) {
       const marker = L.circleMarker([r.latitude, r.longitude], {
-        radius: 9, weight: 2, color: "#1B1F3B",
+        radius: 12, weight: 3, color: "#1B1F3B",
         fillColor: r.visited_on ? "#8fd6a4" : "#f7d774", fillOpacity: 1,
       });
-      marker.bindPopup(() => popupContent(r));
+      // 點標記直接進入店家頁面；滑鼠移上去時顯示店名（用 DOM 元素，避免 XSS）
+      marker.on("click", () => openDetail(r.id));
+      marker.bindTooltip(el("span", "", r.name), { direction: "top", offset: [0, -10] });
       marker.addTo(markerLayer);
       markersById.set(r.id, marker);
     }
     const missing = lastShown.length - withPos.length;
-    mapNote.textContent = (withPos.length ? `地圖上 ${withPos.length} 家（黃色＝想去、綠色＝去過）` : "目前沒有設定位置的餐廳")
+    mapNote.textContent = (withPos.length ? `地圖上 ${withPos.length} 家（黃色＝想去、綠色＝去過），點標記看店家` : "目前沒有設定位置的餐廳")
       + (missing ? `；${missing} 家沒有位置，可在「修改」裡點地圖設定。` : "。");
     if (!fit) return;
     if (withPos.length === 1) mainMap.setView([withPos[0].latitude, withPos[0].longitude], 15);
     else if (withPos.length > 1) mainMap.fitBounds(L.latLngBounds(withPos.map((r) => [r.latitude, r.longitude])), { padding: [32, 32], maxZoom: 15 });
-  }
-
-  // 彈出視窗一律用 DOM 元素與 textContent 建立，避免 XSS
-  function popupContent(r) {
-    const box = el("div");
-    if (r.photos && r.photos.length) {
-      const img = el("img", "pop-photo");
-      img.src = photoUrl(r.photos[0]);
-      img.alt = r.name + " 的照片";
-      img.addEventListener("click", () => { mainMap.closePopup(); openViewer(r, 0); });
-      box.append(img);
-    }
-    box.append(el("div", "pop-name", r.name));
-    box.append(el("div", "pop-meta", [r.city, r.view_type, r.price_range].filter(Boolean).join("・")));
-    box.append(el("div", "pop-meta", (r.rating ? "★".repeat(r.rating) + " " : "") + (r.visited_on ? "去過 " + formatDate(r.visited_on) : "想去")));
-    const nav = el("a", "", "導航 ↗");
-    nav.href = `https://www.google.com/maps/dir/?api=1&destination=${r.latitude},${r.longitude}`;
-    nav.target = "_blank";
-    nav.rel = "noopener noreferrer";
-    const edit = el("button", "ghost pop-btn", "修改");
-    edit.type = "button";
-    edit.addEventListener("click", () => { mainMap.closePopup(); openEditor(r); });
-    const row = el("div", "place-actions");
-    row.append(nav, edit);
-    box.append(row);
-    return box;
   }
 
   function showOnMap(id) {
@@ -315,7 +296,7 @@
     const marker = markersById.get(id);
     if (!marker) return;
     mainMap.setView(marker.getLatLng(), 16);
-    marker.openPopup();
+    marker.openTooltip();
     window.scrollTo({ top: mapView.offsetTop - 70, behavior: "smooth" });
   }
 
@@ -369,7 +350,7 @@
     $("e-lon").value = String(lon);
     if (editMarker) editMarker.setLatLng([lat, lon]);
     else editMarker = L.circleMarker([lat, lon], { radius: 9, weight: 2, color: "#1B1F3B", fillColor: "#f7d774", fillOpacity: 1 }).addTo(editMap);
-    $("e-coords").textContent = `已設定位置：${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    $("e-coords").textContent = "✓ 已設定位置（點地圖其他地方可以移動）";
     $("e-clear-pos").hidden = false;
   }
 
@@ -660,6 +641,96 @@
     }
     return null;
   }
+
+  // ---------- 店家頁面 ----------
+  // 從地圖標記或清單「查看」進入；畫面上不顯示經緯度
+  const detail = $("detail");
+  let detailId = null;
+  $("detail-close").addEventListener("click", () => detail.close());
+
+  function openDetail(id) {
+    const r = rows.find((x) => x.id === id);
+    if (!r) return;
+    detailId = id;
+    $("detail-name").textContent = r.name;
+    const body = $("detail-body");
+    const parts = [];
+
+    const photos = r.photos || [];
+    if (photos.length) {
+      const strip = el("div", "detail-photos");
+      photos.forEach((name, i) => {
+        const b = el("button", "detail-photo");
+        b.type = "button";
+        b.setAttribute("aria-label", `放大第 ${i + 1} 張照片`);
+        const img = el("img");
+        img.src = photoUrl(name);
+        img.alt = `${r.name} 照片 ${i + 1}`;
+        img.loading = "lazy";
+        b.append(img);
+        b.addEventListener("click", () => openViewer(r, i));
+        strip.append(b);
+      });
+      parts.push(strip);
+    }
+
+    const head = el("div", "detail-head");
+    head.append(el("div", "city", r.city));
+    if (r.rating) head.append(el("span", "stars", "★".repeat(r.rating) + "☆".repeat(5 - r.rating)));
+    parts.push(head);
+
+    const chips = el("div", "chips");
+    chips.append(el("span", "chip", r.view_type));
+    if (r.price_range) chips.append(el("span", "chip", r.price_range));
+    if (r.reservation) chips.append(el("span", "chip", "訂位：" + r.reservation));
+    chips.append(r.visited_on ? el("span", "chip chip-visited", "去過 " + formatDate(r.visited_on)) : el("span", "chip chip-want", "想去"));
+    parts.push(chips);
+
+    const facts = el("dl", "facts");
+    if (r.address) addFact(facts, "地址", r.address);
+    if (r.floor_or_height) addFact(facts, "樓層", r.floor_or_height);
+    if (r.window_seat) addFact(facts, "靠窗座位", r.window_seat);
+    if (r.opening_hours) addFact(facts, "營業時間", r.opening_hours);
+    if (r.recommender) addFact(facts, "推薦人", r.recommender);
+    addFact(facts, "加入日期", formatDate(String(r.created_at || "").slice(0, 10)));
+    parts.push(facts);
+    if (r.reason) parts.push(el("p", "reason", r.reason));
+
+    const links = el("div", "detail-links");
+    if (hasPos(r)) {
+      const nav = el("a", "link-btn", "導航 ↗");
+      nav.href = `https://www.google.com/maps/dir/?api=1&destination=${r.latitude},${r.longitude}`;
+      nav.target = "_blank";
+      nav.rel = "noopener noreferrer";
+      links.append(nav);
+    }
+    const href = safeUrl(r.url);
+    if (href) {
+      const site = el("a", "link-btn", "餐廳網站 ↗");
+      site.href = href;
+      site.target = "_blank";
+      site.rel = "noopener noreferrer";
+      links.append(site);
+    }
+    if (hasPos(r) && HAS_MAP && currentView !== "map") {
+      const onMap = el("button", "ghost", "在地圖上看");
+      onMap.type = "button";
+      onMap.addEventListener("click", () => { detail.close(); showOnMap(r.id); });
+      links.append(onMap);
+    }
+    if (!hasPos(r)) links.append(el("span", "muted small", "還沒有設定位置，可在「修改」裡點地圖設定。"));
+    parts.push(links);
+
+    body.replaceChildren(...parts);
+    if (!detail.open) detail.showModal();
+    body.scrollTop = 0;
+  }
+
+  $("detail-edit").addEventListener("click", () => {
+    const r = rows.find((x) => x.id === detailId);
+    detail.close();
+    if (r) openEditor(r);
+  });
 
   // ---------- 照片 ----------
   let editPhotos = [];     // 表單中目前的照片：{ name, url, isNew, blob }
