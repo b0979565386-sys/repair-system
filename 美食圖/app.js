@@ -255,6 +255,15 @@
     return a;
   }
 
+  // Google 地圖的店家頁：用「店名＋地址」搜尋，找到唯一符合的店家時會直接開啟店家頁面
+  function placeLink(r) {
+    const a = el("a", "", "Google 地圖 ↗");
+    a.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent([r.name, r.address].filter(Boolean).join(" "));
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    return a;
+  }
+
   function nameOf(userId) {
     if (!userId) return "（已刪除的帳號）";
     return nicknames.get(userId) || "（未設定暱稱）";
@@ -319,12 +328,14 @@
         iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -28],
       });
       const m = L.marker([r.latitude, r.longitude], { icon, title: r.name, alt: r.name });
-      m.bindPopup(() => popupContent(r));
+      // 點標記直接進入店家頁面；名稱提示用 DOM 元素，避免 XSS
+      m.on("click", () => openDetail(r.id));
+      m.bindTooltip(el("span", "", r.name), { direction: "top", offset: [0, -28] });
       m.addTo(markerLayer);
       markersById.set(r.id, m);
     }
     $("map-note").textContent = shown.length
-      ? `地圖上 ${shown.length} 家。顏色：綠＝4 分以上、橘＝3 分以上、紅＝3 分以下、灰＝尚無評分。`
+      ? `地圖上 ${shown.length} 家，點標記看店家。顏色：綠＝4 分以上、橘＝3 分以上、紅＝3 分以下、灰＝尚無評分。`
       : "目前沒有符合條件的店家。";
     if (!fitted && shown.length) fitToMarkers();
   }
@@ -336,25 +347,13 @@
     else mainMap.fitBounds(L.latLngBounds(shown.map((r) => [r.latitude, r.longitude])), { padding: [32, 32], maxZoom: 17 });
   }
 
-  // 彈出視窗一律用 DOM 元素與 textContent 建立
-  function popupContent(r) {
-    const s = stats(r.id);
-    const box = el("div");
-    box.append(el("div", "pop-name", r.name));
-    box.append(el("div", "pop-meta", `${scoreText(s)}${s.count ? `（${s.count} 人）` : ""}・${r.cuisine}${r.walk_minutes ? `・步行 ${r.walk_minutes} 分` : ""}`));
-    const row = el("div", "item-actions");
-    row.append(navLink(r), button(s.mine ? "看評價" : "評分", "ghost pop-btn", () => { mainMap.closePopup(); openDetail(r.id); }));
-    box.append(row);
-    return box;
-  }
-
   function showOnMap(id) {
     setView("map");
     const m = markersById.get(id);
     if (!m) return;
     fitted = true;
     mainMap.setView(m.getLatLng(), 18);
-    m.openPopup();
+    m.openTooltip();
     window.scrollTo({ top: $("map-view").offsetTop - 70, behavior: "smooth" });
   }
 
@@ -400,8 +399,8 @@
     if (r.delivery !== null) addFact(facts, "外送", r.delivery ? "可以" : "不行");
     addFact(facts, "新增者", nameOf(r.created_by));
     addFact(facts, "加入日期", formatDate(r.created_at));
-    const nav = el("p");
-    nav.append(navLink(r));
+    const nav = el("p", "detail-links");
+    nav.append(navLink(r), placeLink(r));
     sum.replaceChildren(score, chipsFor(r, s), facts, nav);
 
     $("rate-form").hidden = !!s.mine;
