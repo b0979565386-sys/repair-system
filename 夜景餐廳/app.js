@@ -6,7 +6,7 @@
 
   const TABLE = "night_view_restaurants";
   const FIELDS = ["name", "city", "address", "url", "view_type", "floor_or_height", "window_seat",
-    "price_range", "reservation", "opening_hours", "rating", "reason", "recommender", "visited_on"];
+    "price_range", "reservation", "opening_hours", "rating", "reason", "recommender", "visited_on", "latitude", "longitude"];
   const MAX_LEN = { name: 100, city: 50, address: 200, url: 500, floor_or_height: 50, opening_hours: 100, reason: 500, recommender: 50 };
   const LABELS = { name: "餐廳名稱", city: "城市或地區", address: "地址", url: "餐廳網址", floor_or_height: "樓層或高度", opening_hours: "營業時間", reason: "推薦理由", recommender: "推薦人" };
 
@@ -109,6 +109,7 @@
       (!filters.status.value || (filters.status.value === "visited") === !!r.visited_on)
     );
     listEl.replaceChildren(...shown.map(card));
+    updateMap(shown);
     if (rows.length === 0) listStatus.textContent = "還沒有夜景餐廳，按右下角「＋」新增第一家。";
     else if (shown.length === 0) listStatus.textContent = "沒有符合條件的餐廳，試著放寬篩選條件。";
     else listStatus.textContent = shown.length === rows.length ? `共 ${rows.length} 家` : `符合條件 ${shown.length} 家（共 ${rows.length} 家）`;
@@ -151,13 +152,201 @@
     } else {
       actions.append(el("span"));
     }
+    const btns = el("div", "item-btns");
+    if (hasPos(r) && HAS_MAP) {
+      const onMap = el("button", "ghost", "地圖");
+      onMap.type = "button";
+      onMap.setAttribute("aria-label", "在地圖上看 " + r.name);
+      onMap.addEventListener("click", () => showOnMap(r.id));
+      btns.append(onMap);
+    }
     const edit = el("button", "ghost", "修改");
     edit.type = "button";
     edit.setAttribute("aria-label", "修改 " + r.name);
     edit.addEventListener("click", () => openEditor(r));
-    actions.append(edit);
+    btns.append(edit);
+    actions.append(btns);
     li.append(actions);
     return li;
+  }
+
+  // ---------- 地圖（Leaflet＋OpenStreetMap 圖磚，免金鑰） ----------
+  // 圖磚依 OpenStreetMap 規範標示來源，不預先下載、不離線快取。
+  const HAS_MAP = typeof window.L !== "undefined";
+  const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+  const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> 貢獻者';
+  const DEFAULT_CENTER = [23.7, 120.95]; // 預設顯示台灣全島
+  const DEFAULT_ZOOM = 7;
+  const mapView = $("map-view");
+  const mapNote = $("map-note");
+  let mainMap = null;
+  let markerLayer = null;
+  let myPosLayer = null;
+  const markersById = new Map();
+  let lastShown = [];
+  let currentView = "list";
+
+  function hasPos(r) {
+    return r && r.latitude !== null && r.longitude !== null && isFinite(r.latitude) && isFinite(r.longitude);
+  }
+
+  function addTiles(map) {
+    L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
+  }
+
+  $("view-list").addEventListener("click", () => setView("list"));
+  $("view-map").addEventListener("click", () => setView("map"));
+
+  function setView(view) {
+    currentView = view;
+    const isMap = view === "map";
+    $("view-list").classList.toggle("active", !isMap);
+    $("view-map").classList.toggle("active", isMap);
+    $("view-list").setAttribute("aria-pressed", String(!isMap));
+    $("view-map").setAttribute("aria-pressed", String(isMap));
+    listEl.hidden = isMap;
+    mapView.hidden = !isMap;
+    if (!isMap) return;
+    if (!HAS_MAP) {
+      mapNote.textContent = "地圖載入失敗（可能是離線或網路問題），請連上網路後重新開啟。";
+      return;
+    }
+    if (!mainMap) {
+      mainMap = L.map("map", { zoomControl: true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+      addTiles(mainMap);
+      markerLayer = L.layerGroup().addTo(mainMap);
+    }
+    mainMap.invalidateSize();
+    drawMarkers(true);
+  }
+
+  function updateMap(shown) {
+    lastShown = shown;
+    if (currentView === "map" && mainMap) drawMarkers(true);
+  }
+
+  function drawMarkers(fit) {
+    markerLayer.clearLayers();
+    markersById.clear();
+    const withPos = lastShown.filter(hasPos);
+    for (const r of withPos) {
+      const marker = L.circleMarker([r.latitude, r.longitude], {
+        radius: 9, weight: 2, color: "#1B1F3B",
+        fillColor: r.visited_on ? "#8fd6a4" : "#f7d774", fillOpacity: 1,
+      });
+      marker.bindPopup(() => popupContent(r));
+      marker.addTo(markerLayer);
+      markersById.set(r.id, marker);
+    }
+    const missing = lastShown.length - withPos.length;
+    mapNote.textContent = (withPos.length ? `地圖上 ${withPos.length} 家（黃色＝想去、綠色＝去過）` : "目前沒有設定位置的餐廳")
+      + (missing ? `；${missing} 家沒有位置，可在「修改」裡點地圖設定。` : "。");
+    if (!fit) return;
+    if (withPos.length === 1) mainMap.setView([withPos[0].latitude, withPos[0].longitude], 15);
+    else if (withPos.length > 1) mainMap.fitBounds(L.latLngBounds(withPos.map((r) => [r.latitude, r.longitude])), { padding: [32, 32], maxZoom: 15 });
+  }
+
+  // 彈出視窗一律用 DOM 元素與 textContent 建立，避免 XSS
+  function popupContent(r) {
+    const box = el("div");
+    box.append(el("div", "pop-name", r.name));
+    box.append(el("div", "pop-meta", [r.city, r.view_type, r.price_range].filter(Boolean).join("・")));
+    box.append(el("div", "pop-meta", (r.rating ? "★".repeat(r.rating) + " " : "") + (r.visited_on ? "去過 " + formatDate(r.visited_on) : "想去")));
+    const nav = el("a", "", "導航 ↗");
+    nav.href = `https://www.google.com/maps/dir/?api=1&destination=${r.latitude},${r.longitude}`;
+    nav.target = "_blank";
+    nav.rel = "noopener noreferrer";
+    const edit = el("button", "ghost pop-btn", "修改");
+    edit.type = "button";
+    edit.addEventListener("click", () => { mainMap.closePopup(); openEditor(r); });
+    const row = el("div", "place-actions");
+    row.append(nav, edit);
+    box.append(row);
+    return box;
+  }
+
+  function showOnMap(id) {
+    setView("map");
+    const marker = markersById.get(id);
+    if (!marker) return;
+    mainMap.setView(marker.getLatLng(), 16);
+    marker.openPopup();
+    window.scrollTo({ top: mapView.offsetTop - 70, behavior: "smooth" });
+  }
+
+  $("locate-btn").addEventListener("click", () => {
+    if (!HAS_MAP || !mainMap) return;
+    if (!("geolocation" in navigator)) { mapNote.textContent = "這個裝置不支援定位。"; return; }
+    mapNote.textContent = "定位中…";
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const here = [pos.coords.latitude, pos.coords.longitude];
+      if (myPosLayer) myPosLayer.remove();
+      myPosLayer = L.layerGroup([
+        L.circle(here, { radius: Math.min(pos.coords.accuracy || 50, 500), color: "#7aa2f7", weight: 1, fillOpacity: 0.15 }),
+        L.circleMarker(here, { radius: 7, color: "#ffffff", weight: 2, fillColor: "#3b82f6", fillOpacity: 1 }),
+      ]).addTo(mainMap);
+      mainMap.setView(here, 15);
+      drawMarkers(false);
+    }, () => {
+      mapNote.textContent = "無法取得目前位置，請確認已允許定位。";
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  });
+
+  // ---------- 表單裡的位置地圖 ----------
+  let editMap = null;
+  let editMarker = null;
+
+  function initEditMap() {
+    if (!HAS_MAP) {
+      $("e-map").hidden = true;
+      $("e-coords").textContent = "地圖載入失敗，暫時無法設定位置。";
+      return;
+    }
+    if (editMap) return;
+    editMap = L.map("e-map", { zoomControl: true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    addTiles(editMap);
+    editMap.on("click", (e) => setPos(e.latlng.lat, e.latlng.lng));
+  }
+
+  function round6(n) { return Math.round(n * 1e6) / 1e6; }
+
+  function setPos(lat, lon) {
+    lat = round6(lat);
+    lon = round6(((lon + 540) % 360) - 180); // 地圖繞圈時把經度換回 -180～180
+    $("e-lat").value = String(lat);
+    $("e-lon").value = String(lon);
+    if (editMarker) editMarker.setLatLng([lat, lon]);
+    else editMarker = L.circleMarker([lat, lon], { radius: 9, weight: 2, color: "#1B1F3B", fillColor: "#f7d774", fillOpacity: 1 }).addTo(editMap);
+    $("e-coords").textContent = `已設定位置：${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    $("e-clear-pos").hidden = false;
+  }
+
+  function clearPos() {
+    $("e-lat").value = "";
+    $("e-lon").value = "";
+    if (editMarker) { editMarker.remove(); editMarker = null; }
+    if (HAS_MAP) $("e-coords").textContent = "尚未設定位置";
+    $("e-clear-pos").hidden = true;
+  }
+  $("e-clear-pos").addEventListener("click", clearPos);
+
+  // 開啟表單後，依表單內的座標放上或清除標記
+  function syncEditMap() {
+    initEditMap();
+    if (!HAS_MAP) return;
+    const lat = parseFloat($("e-lat").value);
+    const lon = parseFloat($("e-lon").value);
+    setTimeout(() => {
+      editMap.invalidateSize();
+      if (isFinite(lat) && isFinite(lon)) {
+        setPos(lat, lon);
+        editMap.setView([lat, lon], 16);
+      } else {
+        clearPos();
+        const center = mainMap ? mainMap.getCenter() : null;
+        editMap.setView(center || DEFAULT_CENTER, center ? mainMap.getZoom() : DEFAULT_ZOOM);
+      }
+    }, 50);
   }
 
   // ---------- 搜尋景點（OpenStreetMap Nominatim，免金鑰） ----------
@@ -235,6 +424,8 @@
       kind: placeKind(p),
       lat: p.lat,
       lon: p.lon,
+      latitude: isFinite(parseFloat(p.lat)) ? round6(parseFloat(p.lat)) : null,
+      longitude: isFinite(parseFloat(p.lon)) ? round6(parseFloat(p.lon)) : null,
     };
   }
 
@@ -267,7 +458,7 @@
     const add = el("button", "primary", "加入清單");
     add.type = "button";
     add.setAttribute("aria-label", "把 " + p.name + " 加入清單");
-    add.addEventListener("click", () => openEditor(null, { name: p.name, city: p.city, address: p.address, url: p.url }));
+    add.addEventListener("click", () => openEditor(null, { name: p.name, city: p.city, address: p.address, url: p.url, latitude: p.latitude, longitude: p.longitude }));
     actions.append(add);
     li.append(actions);
     return li;
@@ -295,6 +486,7 @@
       if (input) input.value = src[f] !== null && src[f] !== undefined ? String(src[f]) : "";
     }
     editor.showModal();
+    syncEditMap();
     // 從搜尋帶入時，名稱已填好，直接跳到還沒填的必填欄位「夜景類型」
     (prefill && prefill.name ? $("e-view") : $("e-name")).focus();
   }
@@ -307,13 +499,14 @@
     if (invalid) {
       showMsg(editorMsg, invalid.message);
       if (invalid.field) editorForm.elements[invalid.field].focus();
+      else editorMsg.scrollIntoView({ block: "nearest" });
       return;
     }
     const btn = $("save-btn");
     btn.disabled = true;
     btn.textContent = "儲存中…";
     try {
-      // 只送內容欄位；id、owner_id、時間欄位由資料庫產生
+      // 只送內容欄位；id、時間欄位由資料庫產生
       const query = editingId
         ? client.from(TABLE).update(record).eq("id", editingId)
         : client.from(TABLE).insert(record);
@@ -352,6 +545,8 @@
       record[f] = raw === "" ? null : raw;
     }
     record.rating = record.rating ? parseInt(record.rating, 10) : null;
+    record.latitude = record.latitude === null ? null : Number(record.latitude);
+    record.longitude = record.longitude === null ? null : Number(record.longitude);
     return record;
   }
 
@@ -363,6 +558,10 @@
       if (r[f] && r[f].length > max) return { field: f, message: `${LABELS[f]}最多 ${max} 字。` };
     }
     if (r.url && (!safeUrl(r.url) || /\s/.test(r.url))) return { field: "url", message: "餐廳網址必須以 http:// 或 https:// 開頭。" };
+    const hasLat = r.latitude !== null, hasLon = r.longitude !== null;
+    if (hasLat !== hasLon || (hasLat && !(Math.abs(r.latitude) <= 90 && Math.abs(r.longitude) <= 180))) {
+      return { field: null, message: "位置資料不正確，請在地圖上重新點選，或按「清除位置」。" };
+    }
     return null;
   }
 

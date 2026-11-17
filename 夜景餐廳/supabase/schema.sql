@@ -109,6 +109,22 @@ drop policy if exists "只有擁有者可以刪除" on public.night_view_restaur
 drop index if exists public.nvr_owner_created_idx;
 alter table public.night_view_restaurants drop column if exists owner_id;
 
+-- ---------------------------------------------------------------------
+-- 二之一、地圖座標（地圖功能）
+-- ---------------------------------------------------------------------
+-- 緯度與經度可以留空（沒有位置的餐廳不會出現在地圖上），
+-- 但必須兩個都填或兩個都不填，且在合理範圍內。
+-- 用 add column if not exists，新建立或舊版的資料表都能直接套用，既有資料不受影響。
+alter table public.night_view_restaurants
+    add column if not exists latitude  double precision
+        constraint nvr_latitude_range  check (latitude  is null or latitude  between -90  and 90);
+alter table public.night_view_restaurants
+    add column if not exists longitude double precision
+        constraint nvr_longitude_range check (longitude is null or longitude between -180 and 180);
+alter table public.night_view_restaurants drop constraint if exists nvr_coords_pair;
+alter table public.night_view_restaurants
+    add constraint nvr_coords_pair check ((latitude is null) = (longitude is null));
+
 -- 清單依登記時間由新到舊排序，加索引加快查詢。
 create index if not exists nvr_created_idx
     on public.night_view_restaurants (created_at desc);
@@ -131,6 +147,8 @@ comment on column public.night_view_restaurants.rating          is '評分 1～5
 comment on column public.night_view_restaurants.reason          is '推薦理由';
 comment on column public.night_view_restaurants.recommender     is '推薦人（虛構代稱）';
 comment on column public.night_view_restaurants.visited_on      is '去過的日期，未去過留空';
+comment on column public.night_view_restaurants.latitude        is '緯度（地圖位置，可留空）';
+comment on column public.night_view_restaurants.longitude       is '經度（地圖位置，可留空）';
 
 
 -- ---------------------------------------------------------------------
@@ -170,10 +188,12 @@ grant select, delete on table public.night_view_restaurants to anon;
 -- 新增與修改只能寫入下列內容欄位。
 -- id、created_at、updated_at 不在清單內，由資料庫自動產生，網頁不能指定。
 grant insert (name, city, address, url, view_type, floor_or_height, window_seat,
-              price_range, reservation, opening_hours, rating, reason, recommender, visited_on)
+              price_range, reservation, opening_hours, rating, reason, recommender, visited_on,
+              latitude, longitude)
     on table public.night_view_restaurants to anon;
 grant update (name, city, address, url, view_type, floor_or_height, window_seat,
-              price_range, reservation, opening_hours, rating, reason, recommender, visited_on)
+              price_range, reservation, opening_hours, rating, reason, recommender, visited_on,
+              latitude, longitude)
     on table public.night_view_restaurants to anon;
 
 -- 不給 TRUNCATE：即使能刪除，也只能用條件一筆一筆刪，不能一次清空整張表。
