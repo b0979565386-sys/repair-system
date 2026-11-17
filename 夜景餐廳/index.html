@@ -31,8 +31,23 @@
     </header>
 
     <main class="content">
+      <section class="place-search" aria-labelledby="place-title">
+        <h2 id="place-title">搜尋景點</h2>
+        <form id="place-form" class="place-form" role="search">
+          <input id="place-q" type="search" maxlength="100" enterkeyhint="search" placeholder="輸入景點或餐廳名稱，例如：象山、高空餐廳" aria-label="搜尋景點或餐廳">
+          <button id="place-btn" type="submit" class="primary">搜尋</button>
+        </form>
+        <p id="place-status" class="muted small" aria-live="polite" hidden></p>
+        <ul id="place-results" class="place-results"></ul>
+        <p id="place-credit" class="muted small" hidden>
+          搜尋結果來自 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap 貢獻者</a>
+          <button id="place-clear" type="button" class="ghost small-btn">關閉結果</button>
+        </p>
+      </section>
+
+      <h2 class="section-title">我的清單</h2>
       <section class="filters" aria-label="篩選條件">
-        <input id="f-search" type="search" placeholder="搜尋餐廳名稱、城市、地址" aria-label="搜尋">
+        <input id="f-search" type="search" placeholder="在我的清單中找：名稱、城市、地址" aria-label="在我的清單中搜尋">
         <div class="filter-grid">
           <select id="f-city" aria-label="城市或地區"><option value="">全部城市</option></select>
           <select id="f-view" aria-label="夜景類型">
