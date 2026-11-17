@@ -244,3 +244,15 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .dialog-foot .primary { margin-left: auto; min-width: 120px; }
 fieldset { border: 0; padding: 0; margin: 0 0 8px; min-width: 0; }
 legend { font-weight: 700; color: var(--accent); margin-bottom: 8px; padding: 0; }
+
+/* 背景圖：湖面熱氣球（images/background.jpg），加深色遮罩讓文字清楚。
+   用固定的偽元素做背景，iPhone 上捲動也不會跑掉。 */
+html { background: var(--bg); }
+body { background: transparent; }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    linear-gradient(rgba(18, 21, 43, 0.72), rgba(18, 21, 43, 0.9)),
+    url("images/background.jpg") center / cover no-repeat;
+}
+.topbar { background: rgba(18, 21, 43, 0.85); }

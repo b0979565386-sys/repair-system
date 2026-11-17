@@ -199,3 +199,16 @@ legend { font-weight: 700; color: var(--accent); margin-bottom: 8px; padding: 0;
 .review-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; }
 .review-head .who { font-weight: 700; }
 .review p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 背景圖：湖面熱氣球（images/background.jpg），加遮罩讓文字清楚；深色模式用深色遮罩。
+   用固定的偽元素做背景，iPhone 上捲動也不會跑掉。 */
+:root { --bg-overlay: linear-gradient(rgba(251, 247, 243, 0.8), rgba(251, 247, 243, 0.92)); }
+@media (prefers-color-scheme: dark) {
+  :root { --bg-overlay: linear-gradient(rgba(23, 19, 17, 0.78), rgba(23, 19, 17, 0.9)); }
+}
+html { background: var(--bg); }
+body { background: transparent; }
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: var(--bg-overlay), url("images/background.jpg") center / cover no-repeat;
+}
