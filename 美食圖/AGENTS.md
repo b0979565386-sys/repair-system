@@ -58,3 +58,4 @@
 - 畫面上的人名一律顯示 `lunch_profiles` 的暱稱；不可讀取或顯示 `auth.users` 的 Email。
 - 地圖使用 Leaflet（CDN 固定版本並加 SRI）與 OpenStreetMap 圖磚，必須標示「© OpenStreetMap 貢獻者」；位置搜尋使用 Nominatim，只在按下時查詢、每秒最多一次、加 `countrycodes=tw`。
 - 地圖標記與彈出視窗不可用 HTML 字串放使用者輸入的內容（店名、短評、暱稱）。
+- 「導航」連結一律用「店名＋地址」開啟 Google 地圖，不可放經緯度。
