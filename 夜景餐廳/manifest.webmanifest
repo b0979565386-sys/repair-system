@@ -2,7 +2,7 @@
   "id": "./",
   "name": "夜景餐廳口袋名單",
   "short_name": "夜景餐廳",
-  "description": "夜景餐廳清單，打開就能新增、修改、篩選。",
+  "description": "臺灣夜景餐廳清單，打開就能新增、修改、篩選。",
   "lang": "zh-Hant-TW",
   "start_url": "./",
   "scope": "./",

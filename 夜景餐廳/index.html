@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1B1F3B">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="夜景餐廳口袋名單：新增、修改、篩選夜景餐廳">
+  <meta name="description" content="臺灣夜景餐廳口袋名單：新增、修改、篩選夜景餐廳">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -34,9 +34,9 @@
 
     <main class="content">
       <section class="place-search" aria-labelledby="place-title">
-        <h2 id="place-title">搜尋景點</h2>
+        <h2 id="place-title">搜尋臺灣景點</h2>
         <form id="place-form" class="place-form" role="search">
-          <input id="place-q" type="search" maxlength="100" enterkeyhint="search" placeholder="輸入景點或餐廳名稱，例如：象山、高空餐廳" aria-label="搜尋景點或餐廳">
+          <input id="place-q" type="search" maxlength="100" enterkeyhint="search" placeholder="搜尋臺灣的景點或餐廳，例如：象山、高雄 夜景" aria-label="搜尋景點或餐廳">
           <button id="place-btn" type="submit" class="primary">搜尋</button>
         </form>
         <p id="place-status" class="muted small" aria-live="polite" hidden></p>
@@ -52,9 +52,9 @@
         <button id="export-btn" type="button" class="ghost small-btn">匯出</button>
       </div>
       <section class="filters" aria-label="篩選條件">
-        <input id="f-search" type="search" placeholder="在我的清單中找：名稱、城市、地址" aria-label="在我的清單中搜尋">
+        <input id="f-search" type="search" placeholder="在我的清單中找：名稱、縣市、地址" aria-label="在我的清單中搜尋">
         <div class="filter-grid">
-          <select id="f-city" aria-label="城市或地區"><option value="">全部城市</option></select>
+          <select id="f-city" aria-label="縣市"><option value="">全部縣市</option></select>
           <select id="f-view" aria-label="夜景類型">
             <option value="">全部夜景</option>
             <option>城市夜景</option><option>海景</option><option>山景</option><option>河景</option><option>其他</option>
@@ -102,7 +102,7 @@
         <fieldset>
           <legend>基本與地點</legend>
           <div class="field"><label for="e-name">餐廳名稱 <span class="req">*</span></label><input id="e-name" name="name" maxlength="100" required></div>
-          <div class="field"><label for="e-city">城市或地區 <span class="req">*</span></label><input id="e-city" name="city" maxlength="50" required list="city-options"><datalist id="city-options"></datalist></div>
+          <div class="field"><label for="e-city">縣市 <span class="req">*</span></label><select id="e-city" name="city" required><option value="">請選擇縣市</option></select></div>
           <div class="field"><label for="e-address">地址</label><input id="e-address" name="address" maxlength="200"></div>
           <div class="field"><label for="e-url">餐廳網址</label><input id="e-url" name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></div>
         </fieldset>
