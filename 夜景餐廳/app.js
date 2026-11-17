@@ -82,7 +82,7 @@
     try {
       const { data, error } = await client
         .from(TABLE)
-        .select("id, created_at, photos, " + FIELDS.join(", "))
+        .select("id, created_at, updated_at, photos, " + FIELDS.join(", "))
         .order("created_at", { ascending: false });
       if (error) throw error;
       rows = data || [];
@@ -769,6 +769,108 @@
     }));
     viewer.showModal();
     strip.scrollLeft = strip.clientWidth * index;
+  }
+
+  // ---------- 匯出（在瀏覽器產生檔案，不經過伺服器） ----------
+  const exporter = $("exporter");
+  const exportForm = $("export-form");
+  const exportMsg = $("export-msg");
+  const EXPORT_COLUMNS = [
+    ["餐廳名稱", (r) => r.name],
+    ["城市或地區", (r) => r.city],
+    ["地址", (r) => r.address],
+    ["餐廳網址", (r) => r.url],
+    ["夜景類型", (r) => r.view_type],
+    ["樓層或高度", (r) => r.floor_or_height],
+    ["靠窗座位", (r) => r.window_seat],
+    ["每人價位", (r) => r.price_range],
+    ["是否需要訂位", (r) => r.reservation],
+    ["營業時間", (r) => r.opening_hours],
+    ["評分", (r) => r.rating],
+    ["推薦理由", (r) => r.reason],
+    ["推薦人", (r) => r.recommender],
+    ["狀態", (r) => (r.visited_on ? "去過" : "想去")],
+    ["去過的日期", (r) => r.visited_on],
+    ["緯度", (r) => r.latitude],
+    ["經度", (r) => r.longitude],
+    ["照片數", (r) => (r.photos || []).length],
+    ["照片網址", (r) => (r.photos || []).map(photoUrl).join("\n")],
+    ["登記時間", (r) => formatDateTime(r.created_at)],
+    ["最後修改時間", (r) => formatDateTime(r.updated_at)],
+  ];
+
+  $("export-btn").addEventListener("click", () => {
+    const shownCount = lastShown.length, allCount = rows.length;
+    $("export-shown-label").textContent = `目前篩選結果（${shownCount} 家）`;
+    $("export-all-label").textContent = `全部（${allCount} 家）`;
+    const filtered = shownCount !== allCount;
+    exportForm.elements.scope.value = filtered ? "shown" : "all";
+    exportMsg.hidden = true;
+    exporter.showModal();
+  });
+  $("export-cancel").addEventListener("click", () => exporter.close());
+
+  exportForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const list = exportForm.elements.scope.value === "all" ? rows : lastShown;
+    if (!list.length) return showMsg(exportMsg, "沒有可以匯出的餐廳。");
+    const format = exportForm.elements.format.value;
+    // 檔名用英文：部分瀏覽器遇到中文檔名會改成「download」
+    const stamp = fileStamp(new Date());
+    try {
+      if (format === "json") {
+        const data = {
+          app: "夜景餐廳口袋名單",
+          exported_at: new Date().toISOString(),
+          count: list.length,
+          restaurants: list.map((r) => ({ ...r, photo_urls: (r.photos || []).map(photoUrl) })),
+        };
+        download(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), `night-view_${stamp}.json`);
+      } else {
+        download(new Blob(["\uFEFF" + toCsv(list)], { type: "text/csv;charset=utf-8" }), `night-view_${stamp}.csv`);
+      }
+      exporter.close();
+    } catch (err) {
+      console.error(err);
+      showMsg(exportMsg, "匯出失敗，請再試一次。");
+    }
+  });
+
+  // CSV：UTF-8 加 BOM，Excel 才能正確顯示中文；每格依 RFC 4180 加引號。
+  // 清單任何人都能編輯，所以以 = + - @ 等開頭的內容前面加 ' ，避免 Excel 當成公式執行。
+  function toCsv(list) {
+    const cell = (v) => {
+      let t = v === null || v === undefined ? "" : String(v);
+      if (typeof v === "string" && /^[=+\-@\t\r]/.test(t)) t = "'" + t;
+      return '"' + t.replace(/"/g, '""') + '"';
+    };
+    const lines = [EXPORT_COLUMNS.map(([h]) => cell(h)).join(",")];
+    for (const r of list) lines.push(EXPORT_COLUMNS.map(([, get]) => cell(get(r))).join(","));
+    return lines.join("\r\n") + "\r\n";
+  }
+
+  function download(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  function fileStamp(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (isNaN(d)) return String(value);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   }
 
   // ---------- 小工具 ----------
