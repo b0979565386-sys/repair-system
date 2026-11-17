@@ -5,7 +5,7 @@
 // 不快取任何 Supabase 資料、登入資訊、地圖圖磚與搜尋結果：資料只在連線時讀取。
 // 修改網頁檔案後，把 VERSION 加 1，已安裝的 App 才會更新。
 const PREFIX = "lunch-v";
-const VERSION = 3;
+const VERSION = 4;
 const CACHE = PREFIX + VERSION;
 const SHELL = [
   "./",

@@ -704,6 +704,12 @@
       nav.target = "_blank";
       nav.rel = "noopener noreferrer";
       links.append(nav);
+      // Google 地圖的店家頁：用店名＋地址搜尋，找到唯一符合的店家時會直接開啟店家頁面
+      const place = el("a", "link-btn", "Google 地圖 ↗");
+      place.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(mapsText(r.name, r.address, r.city));
+      place.target = "_blank";
+      place.rel = "noopener noreferrer";
+      links.append(place);
     }
     const href = safeUrl(r.url);
     if (href) {
