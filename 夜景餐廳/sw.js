@@ -3,7 +3,7 @@
 // 不快取任何 Supabase 資料：清單只在連線時讀取。
 // 同一個網站上還有其他 App（報修登記、聚餐餐廳清單），所以只清除以「night-view-v」開頭的舊快取。
 const PREFIX = "night-view-v";
-const CACHE = PREFIX + "8";
+const CACHE = PREFIX + "9";
 const SHELL = [
   "./",
   "./index.html",
@@ -14,6 +14,7 @@ const SHELL = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
+  "./images/background.jpg",
 ];
 // 來自 CDN 的程式庫（Supabase、Leaflet 地圖）。地圖圖磚不快取。
 const LIBS = [
