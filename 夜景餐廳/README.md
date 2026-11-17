@@ -8,7 +8,7 @@
 
 - `index.html`、`style.css`、`app.js`、`config.js`：網頁（搜尋景點、新增、修改、刪除、篩選）
 - `manifest.webmanifest`、`sw.js`、`icons/`：PWA 設定、Service Worker 與 App 圖示
-- `supabase/schema.sql`：Supabase 建表 SQL（不用登入，任何人可讀寫）
+- `supabase/schema.sql`：Supabase 建表 SQL 與照片儲存桶（不用登入，任何人可讀寫）
 
 ## 設定（只需做一次）
 
@@ -26,6 +26,15 @@
 3. 按「加入清單」會開啟新增表單，自動帶入名稱、城市、地址與網址（有的話），補上夜景類型後儲存。
 
 搜尋使用 OpenStreetMap 的 Nominatim 服務，不需要金鑰；輸入的關鍵字會送到 OpenStreetMap 的伺服器。找不到時試著加上城市名稱。
+
+## 照片
+
+- 新增或修改時，在「照片」區塊按「＋ 加入照片」，可以拍照或從相簿選（一次可選多張），每家最多 6 張；按照片右上角的「×」可以移除。
+- 上傳前會自動縮小（長邊 1600 像素）並重新存成 JPEG，同時移除照片裡的定位資訊。
+- 清單卡片與地圖彈出視窗會顯示第一張照片，點了可以全螢幕左右滑動看全部。
+- 照片存在 Supabase Storage 的公開儲存桶 `night-view-photos`，和清單一樣，任何拿到網址的人都看得到、也能刪除。
+
+升級：再執行一次 `supabase/schema.sql` 就會建立照片欄位與儲存桶，既有資料不受影響。
 
 ## 地圖
 

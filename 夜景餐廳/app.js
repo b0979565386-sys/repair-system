@@ -10,6 +10,12 @@
   const MAX_LEN = { name: 100, city: 50, address: 200, url: 500, floor_or_height: 50, opening_hours: 100, reason: 500, recommender: 50 };
   const LABELS = { name: "餐廳名稱", city: "城市或地區", address: "地址", url: "餐廳網址", floor_or_height: "樓層或高度", opening_hours: "營業時間", reason: "推薦理由", recommender: "推薦人" };
 
+  // 照片：存在 Supabase Storage 的公開儲存桶，資料表只記檔名
+  const BUCKET = "night-view-photos";
+  const MAX_PHOTOS = 6;
+  const MAX_SIDE = 1600;              // 長邊最多 1600 像素
+  const MAX_BYTES = 2 * 1024 * 1024;  // 與儲存桶的 2 MB 上限一致
+
   const $ = (id) => document.getElementById(id);
   const listEl = $("list");
   const listStatus = $("list-status");
@@ -76,7 +82,7 @@
     try {
       const { data, error } = await client
         .from(TABLE)
-        .select("id, created_at, " + FIELDS.join(", "))
+        .select("id, created_at, photos, " + FIELDS.join(", "))
         .order("created_at", { ascending: false });
       if (error) throw error;
       rows = data || [];
@@ -118,6 +124,20 @@
   function card(r) {
     // 一律用 textContent 放入資料內容，避免 XSS
     const li = el("li", "item");
+    const photos = r.photos || [];
+    if (photos.length) {
+      const btn = el("button", "item-photo");
+      btn.type = "button";
+      btn.setAttribute("aria-label", `查看 ${r.name} 的照片（${photos.length} 張）`);
+      const img = el("img");
+      img.src = photoUrl(photos[0]);
+      img.alt = "";
+      img.loading = "lazy";
+      btn.append(img);
+      if (photos.length > 1) btn.append(el("span", "count", `${photos.length} 張`));
+      btn.addEventListener("click", () => openViewer(r, 0));
+      li.append(btn);
+    }
     const head = el("div", "item-head");
     const title = el("div");
     title.append(el("h3", "", r.name), el("div", "city", r.city));
@@ -249,6 +269,13 @@
   // 彈出視窗一律用 DOM 元素與 textContent 建立，避免 XSS
   function popupContent(r) {
     const box = el("div");
+    if (r.photos && r.photos.length) {
+      const img = el("img", "pop-photo");
+      img.src = photoUrl(r.photos[0]);
+      img.alt = r.name + " 的照片";
+      img.addEventListener("click", () => { mainMap.closePopup(); openViewer(r, 0); });
+      box.append(img);
+    }
     box.append(el("div", "pop-name", r.name));
     box.append(el("div", "pop-meta", [r.city, r.view_type, r.price_range].filter(Boolean).join("・")));
     box.append(el("div", "pop-meta", (r.rating ? "★".repeat(r.rating) + " " : "") + (r.visited_on ? "去過 " + formatDate(r.visited_on) : "想去")));
@@ -485,6 +512,8 @@
       const input = editorForm.elements[f];
       if (input) input.value = src[f] !== null && src[f] !== undefined ? String(src[f]) : "";
     }
+    // 照片：只有修改既有資料時才有已存的照片
+    resetPhotoState((row && row.photos) || []);
     editor.showModal();
     syncEditMap();
     // 從搜尋帶入時，名稱已填好，直接跳到還沒填的必填欄位「夜景類型」
@@ -505,18 +534,35 @@
     const btn = $("save-btn");
     btn.disabled = true;
     btn.textContent = "儲存中…";
+    const uploaded = [];
     try {
+      // 先上傳新照片，成功後才寫入資料表
+      const fresh = editPhotos.filter((p) => p.isNew);
+      for (let i = 0; i < fresh.length; i++) {
+        btn.textContent = `上傳照片 ${i + 1}/${fresh.length}…`;
+        const { error: upErr } = await client.storage.from(BUCKET).upload(fresh[i].name, fresh[i].blob, {
+          contentType: "image/jpeg", cacheControl: "31536000", upsert: false,
+        });
+        if (upErr) throw Object.assign(upErr, { photo: true });
+        uploaded.push(fresh[i].name);
+      }
+      btn.textContent = "儲存中…";
+      record.photos = editPhotos.map((p) => p.name);
       // 只送內容欄位；id、時間欄位由資料庫產生
       const query = editingId
         ? client.from(TABLE).update(record).eq("id", editingId)
         : client.from(TABLE).insert(record);
       const { error } = await query;
       if (error) throw error;
+      // 資料存好後，才刪除這次移除的舊照片
+      if (removedPhotos.length) await removeStoredPhotos(removedPhotos);
       editor.close();
       await load();
     } catch (err) {
       console.error(err);
-      showMsg(editorMsg, "儲存失敗：" + describeError(err));
+      // 資料沒存成功：把這次已上傳的照片刪掉，避免留下沒人用的檔案
+      if (uploaded.length) await removeStoredPhotos(uploaded);
+      showMsg(editorMsg, (err && err.photo ? "照片上傳失敗：" : "儲存失敗：") + describeError(err));
     } finally {
       btn.disabled = false;
       btn.textContent = "儲存";
@@ -528,8 +574,10 @@
     const name = editorForm.elements.name.value.trim() || "這家餐廳";
     if (!window.confirm(`確定要刪除「${name}」嗎？刪除後無法復原。`)) return;
     try {
+      const stored = editPhotos.filter((p) => !p.isNew).map((p) => p.name).concat(removedPhotos);
       const { error } = await client.from(TABLE).delete().eq("id", editingId);
       if (error) throw error;
+      if (stored.length) await removeStoredPhotos(stored);
       editor.close();
       await load();
     } catch (err) {
@@ -565,6 +613,164 @@
     return null;
   }
 
+  // ---------- 照片 ----------
+  let editPhotos = [];     // 表單中目前的照片：{ name, url, isNew, blob }
+  let removedPhotos = [];  // 這次在表單中移除的「已存」照片檔名
+  const photoInput = $("e-photo-input");
+  const photoMsg = $("e-photo-msg");
+
+  function photoUrl(name) {
+    return client.storage.from(BUCKET).getPublicUrl(name).data.publicUrl;
+  }
+
+  function resetPhotoState(names) {
+    releasePreviews();
+    editPhotos = names.map((name) => ({ name, url: photoUrl(name), isNew: false }));
+    removedPhotos = [];
+    photoMsg.hidden = true;
+    renderPhotos();
+  }
+
+  function releasePreviews() {
+    for (const p of editPhotos) if (p.isNew) URL.revokeObjectURL(p.url);
+  }
+  editor.addEventListener("close", releasePreviews);
+
+  function renderPhotos() {
+    const grid = $("e-photos");
+    grid.replaceChildren(...editPhotos.map((p, i) => {
+      const li = el("li");
+      const img = el("img");
+      img.src = p.url;
+      img.alt = `照片 ${i + 1}`;
+      li.append(img);
+      if (p.isNew) li.append(el("span", "photo-new", "新"));
+      const del = el("button", "photo-remove", "×");
+      del.type = "button";
+      del.setAttribute("aria-label", `移除照片 ${i + 1}`);
+      del.addEventListener("click", () => removePhoto(i));
+      li.append(del);
+      return li;
+    }));
+    const full = editPhotos.length >= MAX_PHOTOS;
+    $("e-photo-add").classList.toggle("disabled", full);
+    photoInput.disabled = full;
+    $("e-photo-add").querySelector("span").textContent = full ? `已達 ${MAX_PHOTOS} 張上限` : `＋ 加入照片（${editPhotos.length}/${MAX_PHOTOS}）`;
+  }
+
+  function removePhoto(i) {
+    const [p] = editPhotos.splice(i, 1);
+    if (p.isNew) URL.revokeObjectURL(p.url);
+    else removedPhotos.push(p.name);
+    renderPhotos();
+  }
+
+  photoInput.addEventListener("change", async () => {
+    const files = [...photoInput.files];
+    photoInput.value = "";
+    if (!files.length) return;
+    const room = MAX_PHOTOS - editPhotos.length;
+    const take = files.slice(0, room);
+    const notes = [];
+    if (files.length > room) notes.push(`最多 ${MAX_PHOTOS} 張，只加入前 ${room} 張。`);
+    showPhotoMsg("處理照片中…");
+    for (const file of take) {
+      try {
+        const blob = await toJpeg(file);
+        editPhotos.push({ name: newPhotoName(), blob, url: URL.createObjectURL(blob), isNew: true });
+        renderPhotos();
+      } catch (err) {
+        console.error(err);
+        notes.push(`「${file.name}」無法加入：${err.message}`);
+      }
+    }
+    if (notes.length) showPhotoMsg(notes.join(" "));
+    else photoMsg.hidden = true;
+  });
+
+  function showPhotoMsg(text) {
+    photoMsg.textContent = text;
+    photoMsg.hidden = false;
+  }
+
+  // 縮小並重新存成 JPEG：長邊最多 1600 像素、不超過 2 MB。
+  // 重新繪製會去掉照片裡的 EXIF（含拍攝定位）資訊。
+  async function toJpeg(file) {
+    if (!/^image\//.test(file.type || "")) throw new Error("不是圖片檔。");
+    let source;
+    try {
+      source = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch (_) {
+      source = await loadImage(file);
+    }
+    const w = source.width, h = source.height;
+    if (!w || !h) throw new Error("無法讀取這張照片的格式。");
+    const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height); // 透明背景改成黑色
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    if (source.close) source.close();
+    for (const q of [0.82, 0.72, 0.62, 0.5]) {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", q));
+      if (blob && blob.size <= MAX_BYTES) return blob;
+    }
+    throw new Error("照片太大，壓縮後仍超過 2 MB。");
+  }
+
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("無法讀取這張照片的格式。")); };
+      img.src = url;
+    });
+  }
+
+  function newPhotoName() {
+    let id;
+    if (window.crypto && crypto.randomUUID) id = crypto.randomUUID();
+    else {
+      const b = crypto.getRandomValues(new Uint8Array(16));
+      b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+      const hex = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+      id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+    return id.toLowerCase() + ".jpg";
+  }
+
+  async function removeStoredPhotos(names) {
+    try {
+      const { error } = await client.storage.from(BUCKET).remove(names);
+      if (error) throw error;
+    } catch (err) {
+      // 刪不掉不影響資料，只會在儲存桶留下沒用到的檔案
+      console.warn("照片刪除失敗", err);
+    }
+  }
+
+  // 全螢幕檢視：左右滑動切換照片
+  const viewer = $("viewer");
+  $("viewer-close").addEventListener("click", () => viewer.close());
+  function openViewer(r, index) {
+    const strip = $("viewer-strip");
+    const photos = r.photos || [];
+    $("viewer-title").textContent = `${r.name}（${photos.length} 張）`;
+    strip.replaceChildren(...photos.map((name, i) => {
+      const img = el("img");
+      img.src = photoUrl(name);
+      img.alt = `${r.name} 照片 ${i + 1}`;
+      img.loading = "lazy";
+      return img;
+    }));
+    viewer.showModal();
+    strip.scrollLeft = strip.clientWidth * index;
+  }
+
   // ---------- 小工具 ----------
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -591,6 +797,12 @@
     if (code === "42501") return "沒有權限，請重新執行 supabase/schema.sql 更新資料庫設定。";
     if (code === "23514") return "資料格式不符合規定，請檢查各欄位內容與字數。";
     if (code === "42P01" || code === "PGRST205") return "找不到資料表，請先執行 supabase/schema.sql。";
+    const msg = String((err && err.message) || "");
+    if (/bucket not found/i.test(msg)) return "找不到照片儲存空間，請先執行 supabase/schema.sql。";
+    if (/row-level security|unauthorized/i.test(msg)) return "沒有權限上傳照片，請重新執行 supabase/schema.sql。";
+    if (/maximum allowed size|too large/i.test(msg)) return "照片太大（每張最多 2 MB）。";
+    if (/mime type/i.test(msg)) return "只接受 JPEG 照片。";
+    if (/already exists|duplicate/i.test(msg)) return "照片檔名重複，請再試一次。";
     if (err && /fetch|network/i.test(String(err.message))) return "無法連線到伺服器，請稍後再試。";
     return (err && err.message) || "發生未知錯誤，請稍後再試。";
   }
