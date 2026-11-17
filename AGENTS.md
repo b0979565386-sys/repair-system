@@ -25,3 +25,7 @@ There is no Git history from which to infer commit conventions. Once Git is init
 ## Security & Scope
 
 Use fictional names and locations. Enable Supabase row-level security before exposing data through the frontend. Never commit privileged keys or real personal data. The current demo excludes login and permits only creation and listing; status updates, authentication, and notifications require clarified requirements before implementation.
+
+## PWA
+
+The root app is installable (`manifest.webmanifest`, `sw.js`, `pwa.js`, `icons/`). Other apps live in subfolders on the same origin (`聚餐餐廳登記/`, `夜景餐廳/`), so the root service worker must only handle the files listed in its `SHELL` array and must only delete caches whose name starts with `repair-v`. Never cache Supabase responses. After changing any web file, increment `VERSION` in `sw.js`.

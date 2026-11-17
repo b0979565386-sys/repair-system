@@ -37,8 +37,9 @@
 
 ## 範圍
 
-- 目前只做需求筆記列出的交付物：Excel 欄位表與範例資料、Supabase 資料表與存取規則、網頁清單（只能查看）、Word 操作說明、PowerPoint 提案簡報。
+- 目前只做需求筆記列出的交付物：Excel 欄位表與範例資料、Supabase 資料表與存取規則、網頁清單（只能查看，PWA）、Word 操作說明、PowerPoint 提案簡報。
 - 修改欄位、權限或網頁功能時，同步更新 Word 操作說明與 PowerPoint 提案簡報。
 - 網頁只能讀取資料；不要在網頁加入新增、修改、刪除功能，除非需求筆記先更新。
+- 網頁是 PWA：Service Worker 只處理本資料夾 `SHELL` 列出的檔案、只清除以 `dining-v` 開頭的快取，不可快取 Supabase 資料；修改網頁檔案後把 `sw.js` 的 `VERSION` 加 1。
 - 未經確認不要在 Supabase 執行 SQL；交付的是 SQL 檔案，由負責人自行執行。
 - 登入、投票、通知等功能要等需求確認後才實作。

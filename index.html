@@ -4,11 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#2458c6">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="報修登記">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>報修登記</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="offline-banner" class="offline-banner" role="status" hidden>目前離線，連上網路後才能讀取或送出資料。</div>
   <header class="site-header">
+    <button id="install-btn" type="button" class="install-btn" hidden>安裝 App</button>
     <h1>報修登記</h1>
     <p class="subtitle">填寫下方表單送出報修，送出後會出現在清單中。</p>
   </header>
@@ -82,5 +91,6 @@
           crossorigin="anonymous"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
+  <script src="pwa.js"></script>
 </body>
 </html>

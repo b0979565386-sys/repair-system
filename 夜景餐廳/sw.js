@@ -1,7 +1,9 @@
 // 夜景餐廳 PWA 的 Service Worker。
 // 只快取網頁本身的檔案（App Shell），讓 App 可以安裝、離線也能開啟畫面。
 // 不快取任何 Supabase 資料：清單只在連線時讀取。
-const CACHE = "night-view-v6";
+// 同一個網站上還有其他 App（報修登記、聚餐餐廳清單），所以只清除以「night-view-v」開頭的舊快取。
+const PREFIX = "night-view-v";
+const CACHE = PREFIX + "7";
 const SHELL = [
   "./",
   "./index.html",
@@ -35,7 +37,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     for (const key of await caches.keys()) {
-      if (key !== CACHE) await caches.delete(key);
+      if (key.startsWith(PREFIX) && key !== CACHE) await caches.delete(key);
     }
     await self.clients.claim();
   })());
@@ -60,10 +62,10 @@ self.addEventListener("fetch", (event) => {
       }
       return res;
     } catch (err) {
-      const cached = await caches.match(req, { ignoreSearch: true });
+      const cached = await caches.match(req, { ignoreSearch: true, cacheName: CACHE });
       if (cached) return cached;
       if (req.mode === "navigate") {
-        const shell = await caches.match("./index.html");
+        const shell = await caches.match(new URL("./index.html", self.registration.scope).href, { cacheName: CACHE });
         if (shell) return shell;
       }
       throw err;

@@ -48,6 +48,7 @@
 - 目前只做需求筆記列出的交付物：網頁清單（PWA）、Supabase 資料表與存取規則。
 - PWA 的 Service Worker 只能快取網頁本身的檔案，不可以快取 Supabase 的資料。
 - 修改網頁檔案後，把 `sw.js` 的 `CACHE` 版本號加 1，讓已安裝的 App 更新。
+- 同一個網站上還有其他 App：Service Worker 只能清除以 `night-view-v` 開頭的快取，不可刪除其他 App 的快取；只處理本資料夾的檔案。
 - 未經確認不要在 Supabase 執行 SQL；交付的是檔案，由負責人自行執行。
 - 匯出在瀏覽器產生檔案（CSV 加 UTF-8 BOM、JSON），不經過伺服器；檔名用英文（`night-view_日期_時間`），避免部分瀏覽器把中文檔名改成「download」。
 - CSV 必須逐格加引號，並在以 `= + - @` 開頭的內容前加 `'`，防止公式注入。
