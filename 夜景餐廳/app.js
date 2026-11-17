@@ -160,22 +160,143 @@
     return li;
   }
 
+  // ---------- 搜尋景點（OpenStreetMap Nominatim，免金鑰） ----------
+  // 使用規範：只在按下搜尋時查詢（不做邊打邊搜）、每秒最多一次、標示 OpenStreetMap 來源。
+  // 搜尋結果不存進資料庫，也不被 Service Worker 快取；按「加入清單」才會帶入新增表單。
+  const PLACE_API = "https://nominatim.openstreetmap.org/search";
+  const placeStatus = $("place-status");
+  const placeResults = $("place-results");
+  const placeCredit = $("place-credit");
+  let lastPlaceSearch = 0;
+
+  $("place-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const q = $("place-q").value.trim();
+    if (!q) {
+      showPlaceStatus("請輸入景點或餐廳名稱。");
+      $("place-q").focus();
+      return;
+    }
+    if (!navigator.onLine) return showPlaceStatus("目前離線，連上網路後才能搜尋景點。");
+    const wait = 1000 - (Date.now() - lastPlaceSearch);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastPlaceSearch = Date.now();
+
+    const btn = $("place-btn");
+    btn.disabled = true;
+    btn.textContent = "搜尋中…";
+    showPlaceStatus("搜尋中…");
+    placeResults.replaceChildren();
+    try {
+      const params = new URLSearchParams({
+        q, format: "jsonv2", addressdetails: "1", extratags: "1", limit: "8", "accept-language": "zh-TW,zh,en",
+      });
+      const res = await fetch(PLACE_API + "?" + params.toString(), { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      const places = (Array.isArray(data) ? data : []).map(toPlace).filter((p) => p.name);
+      placeResults.replaceChildren(...places.map(placeCard));
+      placeCredit.hidden = false;
+      showPlaceStatus(places.length ? `找到 ${places.length} 個地點，按「加入清單」帶入新增表單。` : "找不到符合的地點，試試加上城市名稱，例如「台北 象山」。");
+    } catch (err) {
+      console.error(err);
+      placeCredit.hidden = true;
+      showPlaceStatus(/HTTP 429/.test(String(err.message)) ? "搜尋太頻繁，請稍等一下再試。" : "景點搜尋失敗，請稍後再試。");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "搜尋";
+    }
+  });
+
+  $("place-clear").addEventListener("click", () => {
+    placeResults.replaceChildren();
+    placeCredit.hidden = true;
+    placeStatus.hidden = true;
+  });
+
+  function showPlaceStatus(text) {
+    placeStatus.textContent = text;
+    placeStatus.hidden = false;
+  }
+
+  // 把搜尋結果整理成表單欄位，並裁成資料庫允許的長度
+  function toPlace(p) {
+    const a = p.address || {};
+    const name = String(p.name || (p.display_name || "").split(",")[0] || "").trim();
+    const city = a.city || a.town || a.county || a.village || a.state || a.country || "";
+    const parts = String(p.display_name || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length && name.includes(parts[0])) parts.shift();
+    const website = p.extratags && (p.extratags.website || p.extratags["contact:website"]);
+    return {
+      name: clip(name, MAX_LEN.name),
+      city: clip(city, MAX_LEN.city),
+      address: clip(parts.join(", "), MAX_LEN.address),
+      url: website && safeUrl(website) && !/\s/.test(website) && website.length <= MAX_LEN.url ? website : "",
+      kind: placeKind(p),
+      lat: p.lat,
+      lon: p.lon,
+    };
+  }
+
+  function placeKind(p) {
+    const t = String(p.type || "");
+    const c = String(p.category || p.class || "");
+    const map = {
+      restaurant: "餐廳", cafe: "咖啡廳", bar: "酒吧", pub: "酒吧", fast_food: "速食", food_court: "美食街",
+      viewpoint: "觀景點", attraction: "景點", museum: "博物館", park: "公園", peak: "山峰", hotel: "飯店",
+      city: "城市", town: "城鎮", suburb: "地區", station: "車站",
+    };
+    return map[t] || (c === "tourism" ? "景點" : c === "amenity" ? "設施" : "地點");
+  }
+
+  function placeCard(p) {
+    const li = el("li", "place");
+    li.append(el("span", "place-kind", p.kind), el("div", "place-name", p.name));
+    if (p.address) li.append(el("div", "place-addr", p.address));
+    const actions = el("div", "place-actions");
+    const lat = Number(p.lat), lon = Number(p.lon);
+    if (isFinite(lat) && isFinite(lon)) {
+      const a = el("a", "", "在地圖查看 ↗");
+      a.href = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      actions.append(a);
+    } else {
+      actions.append(el("span"));
+    }
+    const add = el("button", "primary", "加入清單");
+    add.type = "button";
+    add.setAttribute("aria-label", "把 " + p.name + " 加入清單");
+    add.addEventListener("click", () => openEditor(null, { name: p.name, city: p.city, address: p.address, url: p.url }));
+    actions.append(add);
+    li.append(actions);
+    return li;
+  }
+
+  function clip(text, max) {
+    const s = String(text || "").trim();
+    return s.length > max ? s.slice(0, max).trim() : s;
+  }
+
   // ---------- 新增／修改／刪除 ----------
   $("add-btn").addEventListener("click", () => openEditor(null));
   editor.querySelector("[data-close]").addEventListener("click", () => editor.close());
 
-  function openEditor(row) {
+  // row：要修改的資料；prefill：新增時預先帶入的欄位（例如搜尋景點的結果）
+  function openEditor(row, prefill) {
     editingId = row ? row.id : null;
     $("editor-title").textContent = row ? "修改夜景餐廳" : "新增夜景餐廳";
     $("delete-btn").hidden = !row;
     editorMsg.hidden = true;
     editorForm.reset();
+    const src = row || prefill || {};
     for (const f of FIELDS) {
       const input = editorForm.elements[f];
-      if (input) input.value = row && row[f] !== null && row[f] !== undefined ? String(row[f]) : "";
+      if (input) input.value = src[f] !== null && src[f] !== undefined ? String(src[f]) : "";
     }
     editor.showModal();
-    $("e-name").focus();
+    // 從搜尋帶入時，名稱已填好，直接跳到還沒填的必填欄位「夜景類型」
+    (prefill && prefill.name ? $("e-view") : $("e-name")).focus();
   }
 
   editorForm.addEventListener("submit", async (event) => {
