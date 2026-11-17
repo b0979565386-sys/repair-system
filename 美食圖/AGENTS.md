@@ -49,3 +49,12 @@
 - 目前只做需求筆記列出的交付物：網頁美食圖、Supabase 資料表與存取規則、Excel 欄位表與範例資料。
 - 未經確認不要在 Supabase 執行 SQL 或更改認證設定；交付的是檔案，由負責人自行執行。
 - 「還沒決定的事」確認之前，相關功能先採最保守的做法，並在回報中說明。
+- 目前的保守做法（見需求筆記括號）：Email＋密碼登入、沒有註冊畫面；同事只能新增店家與評價，不能修改或刪除；暱稱只能改自己的。改變這些之前要先更新需求筆記。
+
+## 網頁與 PWA
+
+- 網頁是 PWA：Service Worker 只處理本資料夾 `SHELL` 列出的檔案、只清除以 `lunch-v` 開頭的快取；不可快取 Supabase 資料、登入資訊、地圖圖磚或搜尋結果。修改網頁檔案後把 `sw.js` 的 `VERSION` 加 1。
+- 登入狀態使用專屬的 `storageKey`（`lunch-map-auth`），不要和同網站的其他 App 共用。
+- 畫面上的人名一律顯示 `lunch_profiles` 的暱稱；不可讀取或顯示 `auth.users` 的 Email。
+- 地圖使用 Leaflet（CDN 固定版本並加 SRI）與 OpenStreetMap 圖磚，必須標示「© OpenStreetMap 貢獻者」；位置搜尋使用 Nominatim，只在按下時查詢、每秒最多一次、加 `countrycodes=tw`。
+- 地圖標記與彈出視窗不可用 HTML 字串放使用者輸入的內容（店名、短評、暱稱）。

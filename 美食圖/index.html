@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#d9480f">
+  <meta name="description" content="公司附近午餐美食圖：同事登入後查看、新增店家與評分">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="美食圖">
+  <title>午餐美食圖</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="offline-banner" class="banner" role="status" hidden>目前離線，連上網路後才能讀取或新增資料。</div>
+  <div id="config-warning" class="banner banner-error" role="alert" hidden></div>
+
+  <!-- 登入（沒有註冊功能：帳號由管理者建立） -->
+  <main id="login-view" class="login" hidden>
+    <img src="icons/icon-192.png" alt="" width="72" height="72" class="login-icon">
+    <h1>午餐美食圖</h1>
+    <p class="muted">公司同事專用，請用管理者建立的帳號登入。</p>
+    <form id="login-form" class="card" novalidate>
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" inputmode="email" required>
+      </div>
+      <div class="field">
+        <label for="login-password">密碼</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+      </div>
+      <button id="login-btn" type="submit" class="primary wide">登入</button>
+      <p id="login-message" class="message" role="alert" hidden></p>
+      <p class="muted small">還沒有帳號？請聯絡管理者開通。</p>
+    </form>
+  </main>
+
+  <!-- 主畫面 -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <h1>午餐美食圖</h1>
+      <div class="topbar-actions">
+        <button id="install-btn" type="button" class="ghost" hidden>安裝 App</button>
+        <button id="nickname-btn" type="button" class="ghost" aria-label="修改暱稱"></button>
+        <button id="logout-btn" type="button" class="ghost">登出</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="filters" aria-label="篩選條件">
+        <input id="f-search" type="search" placeholder="找店名、地址、推薦菜色" aria-label="搜尋店家">
+        <div class="filter-grid">
+          <select id="f-cuisine" aria-label="料理類型">
+            <option value="">全部料理</option>
+            <option>便當</option><option>麵食</option><option>飯類</option><option>輕食</option><option>異國料理</option><option>其他</option>
+          </select>
+          <select id="f-price" aria-label="價位">
+            <option value="">全部價位</option>
+            <option>100 元以下</option><option>100～200 元</option><option>200 元以上</option>
+          </select>
+          <select id="f-walk" aria-label="步行時間">
+            <option value="">步行不限</option>
+            <option value="5">5 分鐘內</option><option value="10">10 分鐘內</option><option value="15">15 分鐘內</option>
+          </select>
+          <select id="f-sort" aria-label="排序">
+            <option value="rating">評分高到低</option>
+            <option value="walk">步行近到遠</option>
+            <option value="new">最新加入</option>
+          </select>
+        </div>
+        <div class="filter-checks">
+          <label class="check"><input id="f-delivery" type="checkbox"> 可外送</label>
+          <label class="check"><input id="f-unrated" type="checkbox"> 我還沒評過</label>
+        </div>
+      </section>
+
+      <div class="view-switch" role="group" aria-label="顯示方式">
+        <button id="view-map" type="button" class="seg active" aria-pressed="true">地圖</button>
+        <button id="view-list" type="button" class="seg" aria-pressed="false">清單</button>
+      </div>
+
+      <p id="list-status" class="muted" aria-live="polite"></p>
+
+      <section id="map-view" class="map-view" aria-label="午餐地圖">
+        <div id="map" class="map"></div>
+        <div class="map-foot">
+          <p id="map-note" class="muted small"></p>
+          <button id="locate-btn" type="button" class="ghost small-btn">📍 我的位置</button>
+        </div>
+      </section>
+      <ul id="list" class="list" hidden></ul>
+    </main>
+
+    <button id="add-btn" type="button" class="fab" aria-label="新增店家">＋</button>
+  </div>
+
+  <!-- 暱稱 -->
+  <dialog id="nickname-dialog" class="small-dialog" aria-labelledby="nickname-title">
+    <form id="nickname-form" novalidate>
+      <h2 id="nickname-title">設定暱稱</h2>
+      <p class="muted small">評價與新增的店家會顯示暱稱，不會顯示 Email。請用代稱，不要用真實姓名。</p>
+      <div class="field">
+        <label for="nickname-input">暱稱（1～20 字）</label>
+        <input id="nickname-input" maxlength="20" required autocomplete="nickname">
+      </div>
+      <p id="nickname-message" class="message" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button id="nickname-cancel" type="button" class="ghost" hidden>取消</button>
+        <button id="nickname-save" type="submit" class="primary">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 店家詳情與評價 -->
+  <dialog id="detail" aria-labelledby="detail-name">
+    <div class="sheet">
+      <header class="dialog-head">
+        <h2 id="detail-name"></h2>
+        <button type="button" class="ghost" id="detail-close">關閉</button>
+      </header>
+      <div class="dialog-body">
+        <div id="detail-summary"></div>
+        <section class="rate-box" aria-labelledby="rate-title">
+          <h3 id="rate-title">我的評價</h3>
+          <form id="rate-form" novalidate>
+            <div class="stars-input" role="radiogroup" aria-label="評分">
+              <input type="radio" id="s5" name="score" value="5"><label for="s5" title="5 分">★</label>
+              <input type="radio" id="s4" name="score" value="4"><label for="s4" title="4 分">★</label>
+              <input type="radio" id="s3" name="score" value="3"><label for="s3" title="3 分">★</label>
+              <input type="radio" id="s2" name="score" value="2"><label for="s2" title="2 分">★</label>
+              <input type="radio" id="s1" name="score" value="1"><label for="s1" title="1 分">★</label>
+            </div>
+            <div class="field">
+              <label for="rate-comment">短評（可留空，最多 200 字）</label>
+              <textarea id="rate-comment" maxlength="200" rows="2" placeholder="例如：份量大、排隊 10 分鐘"></textarea>
+            </div>
+            <button id="rate-btn" type="submit" class="primary wide">送出評價</button>
+            <p class="muted small">每家店只能評一次，送出後不能修改（需要更正請聯絡管理者）。</p>
+          </form>
+          <p id="rate-done" class="muted" hidden></p>
+          <p id="rate-message" class="message" role="alert" hidden></p>
+        </section>
+        <h3 class="reviews-title">大家的評價</h3>
+        <ul id="detail-reviews" class="reviews"></ul>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 新增店家 -->
+  <dialog id="editor" aria-labelledby="editor-title">
+    <form id="editor-form" novalidate>
+      <header class="dialog-head">
+        <h2 id="editor-title">新增店家</h2>
+        <button type="button" class="ghost" id="editor-close">取消</button>
+      </header>
+      <div class="dialog-body">
+        <fieldset>
+          <legend>找位置</legend>
+          <div class="place-form">
+            <input id="place-q" type="search" maxlength="100" enterkeyhint="search" placeholder="搜尋店名或地址（臺灣）" aria-label="搜尋店名或地址">
+            <button id="place-btn" type="button" class="ghost">搜尋</button>
+          </div>
+          <p id="place-status" class="muted small" aria-live="polite" hidden></p>
+          <ul id="place-results" class="place-results"></ul>
+          <p id="place-credit" class="muted small" hidden>搜尋結果來自 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap 貢獻者</a></p>
+          <p class="muted small hint">也可以直接點地圖放上位置，再點別處可以移動。<span class="req">位置必填</span></p>
+          <div id="e-map" class="map map-small" aria-label="選擇店家位置的地圖"></div>
+          <p id="e-coords" class="muted small">尚未設定位置</p>
+          <input type="hidden" id="e-lat" name="latitude">
+          <input type="hidden" id="e-lon" name="longitude">
+        </fieldset>
+        <fieldset>
+          <legend>基本資料</legend>
+          <div class="field"><label for="e-name">店名 <span class="req">*</span></label><input id="e-name" name="name" maxlength="100" required></div>
+          <div class="field"><label for="e-address">地址</label><input id="e-address" name="address" maxlength="200"></div>
+          <div class="field"><label for="e-walk">從公司步行幾分鐘</label><input id="e-walk" name="walk_minutes" type="number" inputmode="numeric" min="1" max="60" placeholder="1～60"></div>
+        </fieldset>
+        <fieldset>
+          <legend>吃什麼與價位</legend>
+          <div class="field"><label for="e-cuisine">料理類型 <span class="req">*</span></label>
+            <select id="e-cuisine" name="cuisine" required><option value="">請選擇</option><option>便當</option><option>麵食</option><option>飯類</option><option>輕食</option><option>異國料理</option><option>其他</option></select></div>
+          <div class="field"><label for="e-price">價位</label>
+            <select id="e-price" name="price_range"><option value="">未填</option><option>100 元以下</option><option>100～200 元</option><option>200 元以上</option></select></div>
+          <div class="field"><label for="e-dishes">推薦菜色</label><input id="e-dishes" name="signature_dishes" maxlength="200" placeholder="例如：排骨飯、酸辣湯"></div>
+        </fieldset>
+        <fieldset>
+          <legend>營業與用餐方式</legend>
+          <div class="field"><label for="e-hours">營業時間</label><input id="e-hours" name="opening_hours" maxlength="100" placeholder="例如：11:00～14:00"></div>
+          <div class="field"><label for="e-mode">用餐方式</label>
+            <select id="e-mode" name="dining_mode"><option value="">未填</option><option>內用</option><option>外帶</option><option>皆可</option></select></div>
+          <div class="field"><label for="e-delivery">可否外送</label>
+            <select id="e-delivery" name="delivery"><option value="">未填</option><option value="true">可以</option><option value="false">不行</option></select></div>
+        </fieldset>
+        <p class="muted small">新增後不能自行修改或刪除；資料有誤請聯絡管理者。</p>
+        <p id="editor-message" class="message" role="alert" hidden></p>
+      </div>
+      <footer class="dialog-foot">
+        <button id="save-btn" type="submit" class="primary">新增店家</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"
+          integrity="sha384-0w2KAL2YHP6wKOkUDzkCDGgVvfmHnj02DHeQ6XcHOgTfFsGyonKOpShMH1x6nk9o"
+          crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH"
+          crossorigin="anonymous"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="pwa.js"></script>
+</body>
+</html>
