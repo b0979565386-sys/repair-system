@@ -47,7 +47,10 @@
         </p>
       </section>
 
-      <h2 class="section-title">我的清單</h2>
+      <div class="list-title">
+        <h2 class="section-title">我的清單</h2>
+        <button id="export-btn" type="button" class="ghost small-btn">匯出</button>
+      </div>
       <section class="filters" aria-label="篩選條件">
         <input id="f-search" type="search" placeholder="在我的清單中找：名稱、城市、地址" aria-label="在我的清單中搜尋">
         <div class="filter-grid">
@@ -156,6 +159,29 @@
         <button id="delete-btn" type="button" class="danger" hidden>刪除</button>
         <button id="save-btn" type="submit" class="primary">儲存</button>
       </footer>
+    </form>
+  </dialog>
+
+  <!-- 匯出 -->
+  <dialog id="exporter" class="exporter" aria-labelledby="export-title">
+    <form id="export-form" method="dialog">
+      <h2 id="export-title">匯出清單</h2>
+      <fieldset>
+        <legend>範圍</legend>
+        <label class="choice"><input type="radio" name="scope" value="shown" checked> <span id="export-shown-label">目前篩選結果</span></label>
+        <label class="choice"><input type="radio" name="scope" value="all"> <span id="export-all-label">全部</span></label>
+      </fieldset>
+      <fieldset>
+        <legend>格式</legend>
+        <label class="choice"><input type="radio" name="format" value="csv" checked> CSV（可用 Excel、Google 試算表開啟）</label>
+        <label class="choice"><input type="radio" name="format" value="json"> JSON（完整備份）</label>
+      </fieldset>
+      <p class="muted small">照片只匯出網址，不包含圖片檔。</p>
+      <p id="export-msg" class="message" role="alert" hidden></p>
+      <div class="export-actions">
+        <button type="button" class="ghost" id="export-cancel">取消</button>
+        <button type="submit" class="primary" id="export-go">下載</button>
+      </div>
     </form>
   </dialog>
 
