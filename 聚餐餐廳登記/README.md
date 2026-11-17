@@ -8,6 +8,7 @@
 - `聚餐餐廳欄位表.xlsx`：欄位表與範例資料
 - `supabase/schema.sql`：Supabase 建表 SQL
 - `index.html`、`style.css`、`app.js`、`config.js`：網頁清單（只能查看）
+- `manifest.webmanifest`、`sw.js`、`pwa.js`、`icons/`：PWA 設定（可安裝到手機主畫面）
 - `聚餐餐廳操作說明.docx`：給主辦人與同事的 Word 操作說明
 - `聚餐餐廳提案簡報.pptx`：6 頁 PowerPoint 提案簡報
 
@@ -26,6 +27,12 @@ python3 -m http.server 8000
 ```
 
 再開啟 http://localhost:8000/聚餐餐廳登記/ 。
+
+## 安裝成 App（PWA）
+
+- Android（Chrome）：開啟網址後按「安裝 App」，或從瀏覽器選單選「安裝應用程式」。
+- iPhone（Safari）：開啟網址 → 分享按鈕 →「加入主畫面」。
+- 離線時可以開啟畫面，但清單需要連網才能讀取。
 
 ## 網址
 
