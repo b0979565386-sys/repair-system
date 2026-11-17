@@ -1,7 +1,7 @@
 // 夜景餐廳 PWA 的 Service Worker。
 // 只快取網頁本身的檔案（App Shell），讓 App 可以安裝、離線也能開啟畫面。
 // 不快取任何 Supabase 資料：清單只在連線時讀取。
-const CACHE = "night-view-v4";
+const CACHE = "night-view-v5";
 const SHELL = [
   "./",
   "./index.html",
@@ -46,7 +46,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
-  // 只處理本站檔案與 CDN 程式庫；Supabase API、景點搜尋、地圖圖磚一律直接連線、不快取
+  // 只處理本站檔案與 CDN 程式庫；Supabase API、照片、景點搜尋、地圖圖磚一律直接連線、不快取
   if (!sameOrigin && !LIBS.includes(req.url)) return;
   if (sameOrigin && !url.pathname.startsWith(new URL("./", self.location).pathname)) return;
 

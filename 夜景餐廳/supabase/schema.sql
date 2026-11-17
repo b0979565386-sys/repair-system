@@ -125,6 +125,19 @@ alter table public.night_view_restaurants drop constraint if exists nvr_coords_p
 alter table public.night_view_restaurants
     add constraint nvr_coords_pair check ((latitude is null) = (longitude is null));
 
+-- ---------------------------------------------------------------------
+-- 二之二、照片檔名（照片功能）
+-- ---------------------------------------------------------------------
+-- 照片本身存在 Storage 的 night-view-photos 儲存桶（見第六節），這裡只記檔名。
+-- 每家最多 6 張；檔名必須是網頁產生的「UUID.jpg」格式，避免塞入其他路徑。
+alter table public.night_view_restaurants
+    add column if not exists photos text[] not null default '{}'::text[]
+        constraint nvr_photos_format check (
+            cardinality(photos) <= 6
+            and (cardinality(photos) = 0
+                 or array_to_string(photos, ',') ~ '^[0-9a-f-]{36}\.jpg(,[0-9a-f-]{36}\.jpg)*$')
+        );
+
 -- 清單依登記時間由新到舊排序，加索引加快查詢。
 create index if not exists nvr_created_idx
     on public.night_view_restaurants (created_at desc);
@@ -149,6 +162,7 @@ comment on column public.night_view_restaurants.recommender     is '推薦人（
 comment on column public.night_view_restaurants.visited_on      is '去過的日期，未去過留空';
 comment on column public.night_view_restaurants.latitude        is '緯度（地圖位置，可留空）';
 comment on column public.night_view_restaurants.longitude       is '經度（地圖位置，可留空）';
+comment on column public.night_view_restaurants.photos          is '照片檔名（存在 Storage 的 night-view-photos，最多 6 張）';
 
 
 -- ---------------------------------------------------------------------
@@ -189,11 +203,11 @@ grant select, delete on table public.night_view_restaurants to anon;
 -- id、created_at、updated_at 不在清單內，由資料庫自動產生，網頁不能指定。
 grant insert (name, city, address, url, view_type, floor_or_height, window_seat,
               price_range, reservation, opening_hours, rating, reason, recommender, visited_on,
-              latitude, longitude)
+              latitude, longitude, photos)
     on table public.night_view_restaurants to anon;
 grant update (name, city, address, url, view_type, floor_or_height, window_seat,
               price_range, reservation, opening_hours, rating, reason, recommender, visited_on,
-              latitude, longitude)
+              latitude, longitude, photos)
     on table public.night_view_restaurants to anon;
 
 -- 不給 TRUNCATE：即使能刪除，也只能用條件一筆一筆刪，不能一次清空整張表。
@@ -236,3 +250,41 @@ create policy "任何人可以刪除"
     for delete
     to anon
     using (true);
+
+
+-- ---------------------------------------------------------------------
+-- 六、照片儲存桶（Supabase Storage）
+-- ---------------------------------------------------------------------
+-- 公開儲存桶：照片可以直接用網址顯示。
+-- 只接受 JPEG、每張最多 2 MB（網頁會先縮圖並重新存成 JPEG，同時移除手機照片裡的定位資訊）。
+-- ※ 不用登入版：任何拿到網址的人都能上傳與刪除照片。
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('night-view-photos', 'night-view-photos', true, 2097152, array['image/jpeg'])
+on conflict (id) do update
+    set public             = excluded.public,
+        file_size_limit    = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
+
+-- Storage 的存取規則寫在 storage.objects 上（Supabase 預設已啟用 RLS）。
+-- 只開放這個儲存桶；檔名必須是「UUID.jpg」，不能建立資料夾或覆蓋別的檔案（不給 UPDATE）。
+drop policy if exists "夜景照片：任何人可以讀取" on storage.objects;
+drop policy if exists "夜景照片：任何人可以上傳" on storage.objects;
+drop policy if exists "夜景照片：任何人可以刪除" on storage.objects;
+
+create policy "夜景照片：任何人可以讀取"
+    on storage.objects
+    for select
+    to anon
+    using (bucket_id = 'night-view-photos');
+
+create policy "夜景照片：任何人可以上傳"
+    on storage.objects
+    for insert
+    to anon
+    with check (bucket_id = 'night-view-photos' and name ~ '^[0-9a-f-]{36}\.jpg$');
+
+create policy "夜景照片：任何人可以刪除"
+    on storage.objects
+    for delete
+    to anon
+    using (bucket_id = 'night-view-photos');

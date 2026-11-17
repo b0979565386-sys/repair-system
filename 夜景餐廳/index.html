@@ -133,6 +133,16 @@
           <input type="hidden" id="e-lon" name="longitude">
         </fieldset>
         <fieldset>
+          <legend>照片</legend>
+          <p class="muted small hint">最多 6 張。上傳前會自動縮小並移除照片裡的定位資訊。照片和清單一樣，任何拿到網址的人都看得到。</p>
+          <ul id="e-photos" class="photo-grid" aria-label="這家餐廳的照片"></ul>
+          <label class="photo-add" id="e-photo-add">
+            <input id="e-photo-input" type="file" accept="image/*" multiple>
+            <span>＋ 加入照片</span>
+          </label>
+          <p id="e-photo-msg" class="muted small" aria-live="polite" hidden></p>
+        </fieldset>
+        <fieldset>
           <legend>評價與推薦</legend>
           <div class="field"><label for="e-rating">評分</label>
             <select id="e-rating" name="rating"><option value="">還沒評分</option><option value="5">★★★★★ 5</option><option value="4">★★★★ 4</option><option value="3">★★★ 3</option><option value="2">★★ 2</option><option value="1">★ 1</option></select></div>
@@ -147,6 +157,15 @@
         <button id="save-btn" type="submit" class="primary">儲存</button>
       </footer>
     </form>
+  </dialog>
+
+  <!-- 照片檢視 -->
+  <dialog id="viewer" class="viewer" aria-label="照片">
+    <div class="viewer-head">
+      <span id="viewer-title"></span>
+      <button type="button" class="ghost" id="viewer-close">關閉</button>
+    </div>
+    <div id="viewer-strip" class="viewer-strip"></div>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"
