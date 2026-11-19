@@ -6,7 +6,12 @@
 
   const TABLE = "night_view_restaurants";
   const FIELDS = ["name", "city", "address", "url", "view_type", "floor_or_height", "window_seat",
-    "price_range", "reservation", "opening_hours", "rating", "reason", "recommender", "visited_on", "latitude", "longitude"];
+    "price_range", "reservation", "opening_hours", "rating", "reason", "recommender", "visited_on", "latitude", "longitude",
+    "ig_post_url", "ig_account", "ig_tags"];
+  // IG 推薦：只接受 instagram.com 的貼文或 Reels、帳號只能是英數底線句點，與資料庫 CHECK 一致
+  const IG_POST_RE = /^https:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv)\/[A-Za-z0-9_-]+\/?(\?\S*)?$/;
+  const IG_ACCOUNT_RE = /^[A-Za-z0-9._]{1,30}$/;
+  const MAX_TAGS = 5;
   const MAX_LEN = { name: 100, city: 50, address: 200, url: 500, floor_or_height: 50, opening_hours: 100, reason: 500, recommender: 50 };
   const LABELS = { name: "餐廳名稱", city: "城市或地區", address: "地址", url: "餐廳網址", floor_or_height: "樓層或高度", opening_hours: "營業時間", reason: "推薦理由", recommender: "推薦人" };
 
@@ -34,7 +39,8 @@
   const editor = $("editor");
   const editorForm = $("editor-form");
   const editorMsg = $("editor-message");
-  const filters = { search: $("f-search"), city: $("f-city"), view: $("f-view"), price: $("f-price"), status: $("f-status") };
+  const filters = { search: $("f-search"), city: $("f-city"), view: $("f-view"), price: $("f-price"), status: $("f-status"), tag: $("f-tag"), ig: $("f-ig") };
+  const gridEl = $("grid");
   const dateFormat = new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" });
 
   let client = null;
@@ -112,6 +118,11 @@
     const keep = filters.city.value;
     filters.city.replaceChildren(new Option("全部縣市", ""), ...cities.map((c) => new Option(c, c)));
     filters.city.value = cities.includes(keep) ? keep : "";
+    // 標籤選單：列出所有出現過的標籤
+    const tags = [...new Set(rows.flatMap((r) => r.ig_tags || []))].sort((a, b) => a.localeCompare(b, "zh-Hant"));
+    const keepTag = filters.tag.value;
+    filters.tag.replaceChildren(new Option("全部標籤", ""), ...tags.map((t) => new Option("#" + t, t)));
+    filters.tag.value = tags.includes(keepTag) ? keepTag : "";
   }
 
   for (const f of Object.values(filters)) f.addEventListener(f.tagName === "INPUT" ? "input" : "change", render);
@@ -119,13 +130,16 @@
   function render() {
     const q = filters.search.value.trim().toLowerCase();
     const shown = rows.filter((r) =>
-      (!q || [r.name, r.city, r.address].some((v) => v && v.toLowerCase().includes(q))) &&
+      (!q || [r.name, r.city, r.address, r.ig_account, ...(r.ig_tags || [])].some((v) => v && v.toLowerCase().includes(q.replace(/^[@#]/, "")))) &&
+      (!filters.tag.value || (r.ig_tags || []).includes(filters.tag.value)) &&
+      (!filters.ig.value || !!r.ig_post_url) &&
       (!filters.city.value || r.city === filters.city.value) &&
       (!filters.view.value || r.view_type === filters.view.value) &&
       (!filters.price.value || r.price_range === filters.price.value) &&
       (!filters.status.value || (filters.status.value === "visited") === !!r.visited_on)
     );
     listEl.replaceChildren(...shown.map(card));
+    gridEl.replaceChildren(...shown.map(tile));
     updateMap(shown);
     if (rows.length === 0) listStatus.textContent = "還沒有夜景餐廳，按右下角「＋」新增第一家。";
     else if (shown.length === 0) listStatus.textContent = "沒有符合條件的餐廳，試著放寬篩選條件。";
@@ -161,6 +175,7 @@
     if (r.price_range) chips.append(el("span", "chip", r.price_range));
     if (r.reservation) chips.append(el("span", "chip", "訂位：" + r.reservation));
     chips.append(r.visited_on ? el("span", "chip chip-visited", "去過 " + formatDate(r.visited_on)) : el("span", "chip chip-want", "想去"));
+    for (const t of r.ig_tags || []) chips.append(el("span", "chip chip-tag", "#" + t));
     li.append(chips);
 
     const facts = el("dl", "facts");
@@ -168,12 +183,21 @@
     if (r.floor_or_height) addFact(facts, "樓層", r.floor_or_height);
     if (r.window_seat) addFact(facts, "靠窗座位", r.window_seat);
     if (r.opening_hours) addFact(facts, "營業時間", r.opening_hours);
+    if (r.ig_account) addFact(facts, "店家 IG", "@" + r.ig_account);
     if (r.recommender) addFact(facts, "推薦人", r.recommender);
     if (facts.childElementCount) li.append(facts);
     if (r.reason) li.append(el("p", "reason", r.reason));
 
     const actions = el("div", "item-actions");
-    const href = safeUrl(r.url);
+    const igHref = igPostHref(r);
+    if (igHref) {
+      const ig = el("a", "ig-link", "IG 貼文 ↗");
+      ig.href = igHref;
+      ig.target = "_blank";
+      ig.rel = "noopener noreferrer";
+      actions.append(ig);
+    }
+    const href = igHref ? null : safeUrl(r.url);
     if (href) {
       const a = el("a", "", "餐廳網站 ↗");
       a.href = href;
@@ -237,17 +261,42 @@
     L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTR }).addTo(map);
   }
 
+  // 照片牆：IG 風格三欄方格；沒有照片的店家用漸層底＋店名
+  function tile(r) {
+    const li = el("li");
+    const b = el("button", "ig-tile");
+    b.type = "button";
+    b.setAttribute("aria-label", "查看 " + r.name);
+    const photos = r.photos || [];
+    if (photos.length) {
+      const img = el("img");
+      img.src = photoUrl(photos[0]);
+      img.alt = "";
+      img.loading = "lazy";
+      b.append(img, el("span", "cap", r.name));
+    } else {
+      b.append(el("span", "ph", r.name));
+    }
+    if (r.ig_post_url) b.append(el("span", "badge", "IG"));
+    else if (photos.length > 1) b.append(el("span", "badge", `${photos.length} 張`));
+    b.addEventListener("click", () => openDetail(r.id));
+    li.append(b);
+    return li;
+  }
+
+  $("view-grid").addEventListener("click", () => setView("grid"));
   $("view-list").addEventListener("click", () => setView("list"));
   $("view-map").addEventListener("click", () => setView("map"));
 
   function setView(view) {
     currentView = view;
     const isMap = view === "map";
-    $("view-list").classList.toggle("active", !isMap);
-    $("view-map").classList.toggle("active", isMap);
-    $("view-list").setAttribute("aria-pressed", String(!isMap));
-    $("view-map").setAttribute("aria-pressed", String(isMap));
-    listEl.hidden = isMap;
+    for (const v of ["grid", "list", "map"]) {
+      $("view-" + v).classList.toggle("active", v === view);
+      $("view-" + v).setAttribute("aria-pressed", String(v === view));
+    }
+    listEl.hidden = view !== "list";
+    gridEl.hidden = view !== "grid";
     mapView.hidden = !isMap;
     if (!isMap) return;
     if (!HAS_MAP) {
@@ -537,6 +586,7 @@
       const input = editorForm.elements[f];
       if (input) input.value = src[f] !== null && src[f] !== undefined ? String(src[f]) : "";
     }
+    editorForm.elements.ig_tags.value = (src.ig_tags || []).join(" ");
     // 照片：只有修改既有資料時才有已存的照片
     resetPhotoState((row && row.photos) || []);
     editor.showModal();
@@ -620,6 +670,9 @@
     record.rating = record.rating ? parseInt(record.rating, 10) : null;
     record.latitude = record.latitude === null ? null : Number(record.latitude);
     record.longitude = record.longitude === null ? null : Number(record.longitude);
+    // IG：帳號去掉 @；標籤用空白、逗號或 # 分開，去掉重複
+    if (record.ig_account) record.ig_account = record.ig_account.replace(/^@+/, "") || null;
+    record.ig_tags = [...new Set(String(record.ig_tags || "").split(/[\s,，、#＃]+/).filter(Boolean))];
     return record;
   }
 
@@ -632,6 +685,12 @@
       if (r[f] && r[f].length > max) return { field: f, message: `${LABELS[f]}最多 ${max} 字。` };
     }
     if (r.url && (!safeUrl(r.url) || /\s/.test(r.url))) return { field: "url", message: "餐廳網址必須以 http:// 或 https:// 開頭。" };
+    if (r.ig_post_url && (r.ig_post_url.length > 300 || !IG_POST_RE.test(r.ig_post_url))) {
+      return { field: "ig_post_url", message: "IG 網址請貼貼文或 Reels 的連結，例如 https://www.instagram.com/p/…" };
+    }
+    if (r.ig_account && !IG_ACCOUNT_RE.test(r.ig_account)) return { field: "ig_account", message: "店家 IG 帳號只能有英文、數字、底線和句點，最多 30 字。" };
+    if (r.ig_tags.length > MAX_TAGS) return { field: "ig_tags", message: `標籤最多 ${MAX_TAGS} 個。` };
+    if (r.ig_tags.some((t) => t.length > 20)) return { field: "ig_tags", message: "每個標籤最多 20 字。" };
     const hasLat = r.latitude !== null, hasLon = r.longitude !== null;
     if (hasLat !== hasLon || (hasLat && !(Math.abs(r.latitude) <= 90 && Math.abs(r.longitude) <= 180))) {
       return { field: null, message: "位置資料不正確，請在地圖上重新點選，或按「清除位置」。" };
@@ -684,6 +743,7 @@
     if (r.price_range) chips.append(el("span", "chip", r.price_range));
     if (r.reservation) chips.append(el("span", "chip", "訂位：" + r.reservation));
     chips.append(r.visited_on ? el("span", "chip chip-visited", "去過 " + formatDate(r.visited_on)) : el("span", "chip chip-want", "想去"));
+    for (const t of r.ig_tags || []) chips.append(el("span", "chip chip-tag", "#" + t));
     parts.push(chips);
 
     const facts = el("dl", "facts");
@@ -691,6 +751,7 @@
     if (r.floor_or_height) addFact(facts, "樓層", r.floor_or_height);
     if (r.window_seat) addFact(facts, "靠窗座位", r.window_seat);
     if (r.opening_hours) addFact(facts, "營業時間", r.opening_hours);
+    if (r.ig_account) addFact(facts, "店家 IG", "@" + r.ig_account);
     if (r.recommender) addFact(facts, "推薦人", r.recommender);
     addFact(facts, "加入日期", formatDate(String(r.created_at || "").slice(0, 10)));
     parts.push(facts);
@@ -724,6 +785,21 @@
       onMap.type = "button";
       onMap.addEventListener("click", () => { detail.close(); showOnMap(r.id); });
       links.append(onMap);
+    }
+    const igHref = igPostHref(r);
+    if (igHref) {
+      const ig = el("a", "link-btn", "IG 貼文 ↗");
+      ig.href = igHref;
+      ig.target = "_blank";
+      ig.rel = "noopener noreferrer";
+      links.prepend(ig);
+    }
+    if (r.ig_account && IG_ACCOUNT_RE.test(r.ig_account)) {
+      const acc = el("a", "link-btn", "@" + r.ig_account + " ↗");
+      acc.href = "https://www.instagram.com/" + encodeURIComponent(r.ig_account) + "/";
+      acc.target = "_blank";
+      acc.rel = "noopener noreferrer";
+      links.append(acc);
     }
     if (!hasPos(r)) links.append(el("span", "muted small", "還沒有設定位置，可在「修改」裡點地圖設定。"));
     parts.push(links);
@@ -915,6 +991,9 @@
     ["評分", (r) => r.rating],
     ["推薦理由", (r) => r.reason],
     ["推薦人", (r) => r.recommender],
+    ["IG 貼文", (r) => r.ig_post_url],
+    ["店家 IG", (r) => (r.ig_account ? "@" + r.ig_account : "")],
+    ["標籤", (r) => (r.ig_tags || []).map((t) => "#" + t).join(" ")],
     ["狀態", (r) => (r.visited_on ? "去過" : "想去")],
     ["去過的日期", (r) => r.visited_on],
     ["緯度", (r) => r.latitude],
@@ -1000,6 +1079,10 @@
   }
 
   // ---------- 小工具 ----------
+  // 只回傳符合格式的 IG 貼文網址，避免奇怪的連結
+  function igPostHref(r) {
+    return r && r.ig_post_url && IG_POST_RE.test(r.ig_post_url) ? r.ig_post_url : null;
+  }
   // Google 地圖用的文字：店名＋地址（沒有地址就用縣市），不放經緯度
   function mapsText(name, address, city) {
     const where = address || city || "";

@@ -158,12 +158,37 @@ alter table public.night_view_restaurants
         or (latitude between 21.8 and 26.5 and longitude between 118.0 and 122.2)
     ) not valid;
 
+-- ---------------------------------------------------------------------
+-- 二之四、IG 推薦（IG 推薦夜景餐廳）
+-- ---------------------------------------------------------------------
+-- ig_post_url：推薦這家店的 IG 貼文或 Reels 網址（只接受 instagram.com）。
+-- ig_account ：店家的 IG 帳號（不含 @，只能是英文、數字、底線、句點，最多 30 字）。
+-- ig_tags    ：標籤（不含 #），最多 5 個，每個 1～20 字，不能有空白、逗號或 #。
+-- 都可以留空；用 add column if not exists，舊資料表重新執行即可升級。
+alter table public.night_view_restaurants
+    add column if not exists ig_post_url text
+        constraint nvr_ig_post_format check (
+            ig_post_url is null
+            or (ig_post_url ~ '^https://(www\.)?instagram\.com/(p|reel|reels|tv)/[A-Za-z0-9_-]+/?([?][^[:space:]]*)?$'
+                and char_length(ig_post_url) <= 300)
+        );
+alter table public.night_view_restaurants
+    add column if not exists ig_account text
+        constraint nvr_ig_account_format check (ig_account is null or ig_account ~ '^[A-Za-z0-9._]{1,30}$');
+alter table public.night_view_restaurants
+    add column if not exists ig_tags text[] not null default '{}'::text[]
+        constraint nvr_ig_tags_format check (
+            cardinality(ig_tags) <= 5
+            and (cardinality(ig_tags) = 0
+                 or array_to_string(ig_tags, ',') ~ '^[^[:space:]#,]{1,20}(,[^[:space:]#,]{1,20})*$')
+        );
+
 -- 清單依登記時間由新到舊排序，加索引加快查詢。
 create index if not exists nvr_created_idx
     on public.night_view_restaurants (created_at desc);
 
 -- 資料表與欄位說明，會顯示在 Supabase 的 Table Editor。
-comment on table  public.night_view_restaurants                 is '臺灣夜景餐廳口袋名單（不用登入，任何人可讀寫，請只放可公開的內容）';
+comment on table  public.night_view_restaurants                 is 'IG 推薦臺灣夜景餐廳口袋名單（不用登入，任何人可讀寫，請只放可公開的內容）';
 comment on column public.night_view_restaurants.created_at      is '登記時間，自動產生';
 comment on column public.night_view_restaurants.updated_at      is '最後修改時間，自動更新';
 comment on column public.night_view_restaurants.name            is '餐廳名稱';
@@ -183,6 +208,9 @@ comment on column public.night_view_restaurants.visited_on      is '去過的日
 comment on column public.night_view_restaurants.latitude        is '緯度（地圖位置，可留空）';
 comment on column public.night_view_restaurants.longitude       is '經度（地圖位置，可留空）';
 comment on column public.night_view_restaurants.photos          is '照片檔名（存在 Storage 的 night-view-photos，最多 6 張）';
+comment on column public.night_view_restaurants.ig_post_url     is '推薦的 IG 貼文或 Reels 網址';
+comment on column public.night_view_restaurants.ig_account      is '店家 IG 帳號（不含 @）';
+comment on column public.night_view_restaurants.ig_tags         is '標籤（不含 #，最多 5 個）';
 
 
 -- ---------------------------------------------------------------------
@@ -223,11 +251,11 @@ grant select, delete on table public.night_view_restaurants to anon;
 -- id、created_at、updated_at 不在清單內，由資料庫自動產生，網頁不能指定。
 grant insert (name, city, address, url, view_type, floor_or_height, window_seat,
               price_range, reservation, opening_hours, rating, reason, recommender, visited_on,
-              latitude, longitude, photos)
+              latitude, longitude, photos, ig_post_url, ig_account, ig_tags)
     on table public.night_view_restaurants to anon;
 grant update (name, city, address, url, view_type, floor_or_height, window_seat,
               price_range, reservation, opening_hours, rating, reason, recommender, visited_on,
-              latitude, longitude, photos)
+              latitude, longitude, photos, ig_post_url, ig_account, ig_tags)
     on table public.night_view_restaurants to anon;
 
 -- 不給 TRUNCATE：即使能刪除，也只能用條件一筆一筆刪，不能一次清空整張表。

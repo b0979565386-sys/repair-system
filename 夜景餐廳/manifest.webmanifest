@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "夜景餐廳口袋名單",
-  "short_name": "夜景餐廳",
-  "description": "臺灣夜景餐廳清單，打開就能新增、修改、篩選。",
+  "name": "IG 推薦夜景餐廳",
+  "short_name": "IG 夜景",
+  "description": "IG 推薦的臺灣夜景餐廳清單：收藏 IG 貼文、標籤、照片與地圖。",
   "lang": "zh-Hant-TW",
   "start_url": "./",
   "scope": "./",
