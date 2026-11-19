@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1B1F3B">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="臺灣夜景餐廳口袋名單：新增、修改、篩選夜景餐廳">
+  <meta name="description" content="IG 推薦的臺灣夜景餐廳口袋名單：收藏 IG 貼文、標籤、照片與地圖">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="夜景餐廳">
-  <title>夜景餐廳口袋名單</title>
+  <meta name="apple-mobile-web-app-title" content="IG 夜景">
+  <title>IG 推薦夜景餐廳</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -25,7 +25,7 @@
   <!-- 清單畫面（不用登入） -->
   <div id="app-view">
     <header class="topbar">
-      <h1>夜景餐廳</h1>
+      <h1>IG 夜景餐廳</h1>
       <div class="topbar-actions">
         <button id="install-btn" type="button" class="ghost" hidden>安裝 App</button>
         <button id="refresh-btn" type="button" class="ghost">重新整理</button>
@@ -52,7 +52,7 @@
         <button id="export-btn" type="button" class="ghost small-btn">匯出</button>
       </div>
       <section class="filters" aria-label="篩選條件">
-        <input id="f-search" type="search" placeholder="在我的清單中找：名稱、縣市、地址" aria-label="在我的清單中搜尋">
+        <input id="f-search" type="search" placeholder="在清單中找：名稱、縣市、@帳號、#標籤" aria-label="在我的清單中搜尋">
         <div class="filter-grid">
           <select id="f-city" aria-label="縣市"><option value="">全部縣市</option></select>
           <select id="f-view" aria-label="夜景類型">
@@ -68,15 +68,22 @@
             <option value="want">只看想去</option>
             <option value="visited">只看去過</option>
           </select>
+          <select id="f-tag" aria-label="標籤"><option value="">全部標籤</option></select>
+          <select id="f-ig" aria-label="IG 推薦">
+            <option value="">有無 IG 都顯示</option>
+            <option value="post">有 IG 貼文</option>
+          </select>
         </div>
       </section>
 
       <div class="view-switch" role="group" aria-label="顯示方式">
+        <button id="view-grid" type="button" class="seg" aria-pressed="false">照片牆</button>
         <button id="view-list" type="button" class="seg active" aria-pressed="true">清單</button>
         <button id="view-map" type="button" class="seg" aria-pressed="false">地圖</button>
       </div>
 
       <p id="list-status" class="muted" aria-live="polite"></p>
+      <ul id="grid" class="ig-grid" aria-label="照片牆" hidden></ul>
       <ul id="list" class="list"></ul>
 
       <section id="map-view" class="map-view" aria-label="餐廳地圖" hidden>
@@ -146,11 +153,17 @@
           <p id="e-photo-msg" class="muted small" aria-live="polite" hidden></p>
         </fieldset>
         <fieldset>
+          <legend>IG 推薦</legend>
+          <div class="field"><label for="e-ig-post">IG 貼文或 Reels 網址</label><input id="e-ig-post" name="ig_post_url" type="url" inputmode="url" maxlength="300" placeholder="https://www.instagram.com/p/…"></div>
+          <div class="field"><label for="e-ig-account">店家 IG 帳號</label><input id="e-ig-account" name="ig_account" maxlength="31" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="@帳號"></div>
+          <div class="field"><label for="e-ig-tags">標籤（最多 5 個，用空白分開）</label><input id="e-ig-tags" name="ig_tags" maxlength="120" placeholder="例如：約會 景觀 調酒"></div>
+        </fieldset>
+        <fieldset>
           <legend>評價與推薦</legend>
           <div class="field"><label for="e-rating">評分</label>
             <select id="e-rating" name="rating"><option value="">還沒評分</option><option value="5">★★★★★ 5</option><option value="4">★★★★ 4</option><option value="3">★★★ 3</option><option value="2">★★ 2</option><option value="1">★ 1</option></select></div>
           <div class="field"><label for="e-visited">去過的日期（還沒去過就留空）</label><input id="e-visited" name="visited_on" type="date"></div>
-          <div class="field"><label for="e-recommender">推薦人</label><input id="e-recommender" name="recommender" maxlength="50" placeholder="例如 朋友 A、旅遊書"></div>
+          <div class="field"><label for="e-recommender">推薦人</label><input id="e-recommender" name="recommender" maxlength="50" placeholder="例如 @推薦的IG帳號、朋友 A"></div>
           <div class="field"><label for="e-reason">推薦理由</label><textarea id="e-reason" name="reason" maxlength="500" rows="3"></textarea></div>
         </fieldset>
         <p id="editor-message" class="message" role="alert" hidden></p>
